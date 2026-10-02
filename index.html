@@ -325,12 +325,17 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   const TF0 = { on: false, basis: 'dest', from: '', to: '' };
   const tf = { go: { ...TF0, ...ls.get('pp.tf.go', {}) }, back: { ...TF0, ...ls.get('pp.tf.back', {}) } };
   const schoolStops = () => (onlyMmu ? SCHOOL.slice(0, 1) : SCHOOL);
-  let timer = null, nextAt = 0, busy = false, last = null;
+  let timer = null, nextAt = 0, busy = false, last = null, sched = null;
 
   // ---- API ----
   function cred() { return ls.get('pp.cred'); }
 
-  async function token() {
+  let tokenP = null;
+  function token() {
+    if (!tokenP) tokenP = getToken().finally(() => { tokenP = null; });
+    return tokenP;
+  }
+  async function getToken() {
     const c = cred();
     if (!c) return null;
     const t = ls.get('pp.token');
@@ -354,13 +359,16 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   }
   function usedToday() { const u = ls.get('pp.usage'); return u && u.d === today() ? u.n : 0; }
 
-  async function api(path, retry = true) {
+  const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  async function api(path, retry = true, tries = 0) {
     const tk = await token();
     const headers = tk ? { authorization: 'Bearer ' + tk } : {};
     const url = API + path + (path.includes('?') ? '&' : '?') + '$format=JSON';
     const r = await fetch(url, { headers });
     countUse();
-    if (r.status === 401 && tk && retry) { ls.del('pp.token'); return api(path, false); }
+    if (r.status === 401 && tk && retry) { ls.del('pp.token'); return api(path, false, tries); }
+    // 有金鑰時的 429 是「每秒太多次」，等一下再試就好
+    if (r.status === 429 && tk && tries < 3) { await sleep(1200 * (tries + 1)); return api(path, retry, tries + 1); }
     if (r.status === 429) throw new Error(tk ? '查詢太頻繁，稍等一下再按更新。' : '今天免金鑰的次數用完了（每個網路每天 50 次）。到「設定」填入免費金鑰就能繼續用。');
     if (r.status === 401) throw new Error('TDX 需要金鑰才能查詢，請到「設定」填入 Client Id 和 Client Secret。');
     if (!r.ok) throw new Error('TDX 回應錯誤（' + r.status + '），稍後再試。');
@@ -382,9 +390,65 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     return data;
   }
 
+  // ---- 時刻表（TDX Schedule，一天抓一次；抓不到就算了） ----
+  async function loadSchedule(routes) {
+    const c = ls.get('pp.sched.v1');
+    if (c && c.d === today()) return c.data;
+    const uids = [...new Set(routes.map((r) => r.routeUID))];
+    let data = [];
+    try {
+      const raw = await api(`Schedule/City/${CITY}?` + orFilter('RouteUID', uids));
+      data = raw.map((x) => ({
+        routeUID: x.RouteUID, subUID: x.SubRouteUID, dir: x.Direction,
+        tt: (x.Timetables || []).map((t) => ({
+          days: t.ServiceDay || null,
+          st: (t.StopTimes || []).map((s) => ({ uid: s.StopUID, name: s.StopName?.Zh_tw, seq: s.StopSequence, time: s.DepartureTime || s.ArrivalTime }))
+            .filter((s) => s.time).sort((a, b) => a.seq - b.seq),
+        })).filter((t) => t.st.length),
+        fq: (x.Frequencys || []).map((f) => ({ days: f.ServiceDay || null, start: f.StartTime, end: f.EndTime, gap: (f.MinHeadwayMins + f.MaxHeadwayMins) / 2 || f.MinHeadwayMins }))
+          .filter((f) => f.start && f.end && f.gap > 0),
+      }));
+    } catch {
+      return []; // 抓不到就先不推估，重新整理頁面時再試（不存起來）
+    }
+    ls.set('pp.sched.v1', { d: today(), data });
+    return data;
+  }
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const runsToday = (days) => !days || days[DAYS[new Date().getDay()]] !== 0;
+
+  // 依時刻表推估：每個班次「在上車站的時間」
+  const learnedPerStop = {}; // 路線 → 每站幾秒（從即時資料學來的）
+  function scheduledBoards(t, sched, now) {
+    const out = [];
+    const per = learnedPerStop[t.route] || 80;
+    for (const s of sched) {
+      if (s.routeUID !== t.routeUID || s.dir !== t.dir) continue;
+      const sub = t.subs[s.subUID] || { fromSeq: t.from.seq, stops: t.stops };
+      const origin = sub.stops?.[0]?.name || t.stops[0].name;
+      for (const tt of s.tt) {
+        if (!runsToday(tt.days)) continue;
+        const here = tt.st.find((x) => x.uid === t.from.uid || x.name === t.from.name);
+        const first = tt.st[0];
+        const dep = atToday(first.time);
+        const board = here ? atToday(here.time) : dep + Math.max(0, sub.fromSeq - first.seq) * per * 1000;
+        if (dep > now) out.push({ dep, board, origin: first.name || origin, exact: !!here });
+      }
+      for (const f of s.fq) {
+        if (!runsToday(f.days)) continue;
+        const end = atToday(f.end);
+        for (let dep = atToday(f.start); dep <= end; dep += f.gap * 60000) {
+          if (dep > now) out.push({ dep, board: dep + Math.max(0, sub.fromSeq - 1) * per * 1000, origin, exact: false, freq: true });
+        }
+      }
+    }
+    // 同一班可能被兩個子路線重複列，去掉 3 分鐘內的重複
+    out.sort((a, b) => a.board - b.board);
+    return out.filter((x, i) => !i || x.board - out[i - 1].board > 180000);
+  }
+
   // 依方向找出「從哪站上車、在哪站下車」
-  function buildTrips(routes, which) {
-    const SCH = schoolStops();
+  function buildTrips(routes, which, SCH = schoolStops()) {
     const groups = new Map();
     for (const r of routes) {
       const st = r.stops;
@@ -422,18 +486,19 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     $('error').hidden = true;
     try {
       const routes = await loadRoutes(false);
-      const trips = buildTrips(routes, dir);
-      if (!trips.length) throw new Error(onlyMmu
-        ? '沒有經過埔坪和馬偕醫學大學站的路線。可以關掉「只顯示馬偕醫學大學站」再看看。'
-        : '找不到經過埔坪和馬偕的路線資料，請在「設定」按「重新抓路線資料」。');
-      const stopUIDs = [...new Set(trips.flatMap((t) => [t.from.uid, t.to.uid]))];
-      const routeNames = [...new Set(trips.map((t) => t.route))];
-      const [eta, pos] = await Promise.all([
-        api(`EstimatedTimeOfArrival/City/${CITY}?` + orFilter('StopUID', stopUIDs)),
-        api(`RealTimeNearStop/City/${CITY}?` + orFilter('RouteName/Zh_tw', routeNames)),
-      ]);
-      last = { trips, eta, pos, at: Date.now() };
+      // 上學、回家、有沒有勾「只顯示馬偕醫學大學站」都一起抓，切換時就不用再查
+      const all = [...buildTrips(routes, 'go', SCHOOL), ...buildTrips(routes, 'back', SCHOOL)];
+      if (!all.length) throw new Error('找不到經過埔坪和馬偕的路線資料，請在「設定」按「重新抓路線資料」。');
+      const stopUIDs = [...new Set(all.flatMap((t) => [t.from.uid, t.to.uid]))];
+      const routeNames = [...new Set(all.map((t) => t.route))];
+      const eta = await api(`EstimatedTimeOfArrival/City/${CITY}?` + orFilter('StopUID', stopUIDs));
+      const pos = await api(`RealTimeNearStop/City/${CITY}?` + orFilter('RouteName/Zh_tw', routeNames));
+      last = { routes, eta, pos, at: Date.now() };
       render();
+      if (!sched) {
+        sched = await loadSchedule(routes.filter((r) => all.some((t) => t.routeUID === r.routeUID)));
+        if (sched.length) render();
+      }
       const upd = [...eta, ...pos].map((x) => Date.parse(x.UpdateTime || x.SrcUpdateTime)).filter(Boolean);
       $('status').dataset.base = upd.length ? '資料時間 ' + hhmm(new Date(Math.max(...upd))) : '';
     } catch (e) {
@@ -450,8 +515,15 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   function render() {
     if (!last) { renderSched(); return; }
-    const { trips, eta, pos, at } = last;
+    const { routes, eta, pos, at } = last;
+    const trips = buildTrips(routes, dir);
     const now = Date.now();
+    if (!trips.length) {
+      $('list').innerHTML = `<div class="empty">${onlyMmu ? '沒有經過埔坪和馬偕醫學大學站的路線。可以關掉「只顯示馬偕醫學大學站」再看看。' : '沒有符合的路線。'}</div>`;
+      $('idleWrap').hidden = true; $('tfNote').hidden = true;
+      checkAlarm([]); renderSched();
+      return;
+    }
     const gone = (now - at) / 1000; // 資料抓下來後過了幾秒
     const rows = [], idle = [];
     for (const t of trips) {
@@ -468,14 +540,26 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
         .sort((a, b) => a.left - b.left);
 
       const hasEta = e && e.StopStatus === 0 && Number.isFinite(e.EstimateTime);
+
+      // 上學方向：用時刻表推估還沒發車的班次（像 Google 地圖）
+      let planned = dir === 'go' && sched ? scheduledBoards(t, sched, now) : [];
+      planned = planned.filter((x) => x.board - now < (tfActive() ? 18 : 3) * 3600000);
+      // TDX 對「尚未發車」那班有自己的預估，用它取代時刻表裡最接近的那班
+      if (e && e.StopStatus === 1 && Number.isFinite(e.EstimateTime) && e.EstimateTime - gone > 0) {
+        const nb = now + (e.EstimateTime - gone) * 1000;
+        planned = planned.filter((x) => Math.abs(x.board - nb) > 15 * 60000);
+        planned.push({ board: nb, tdx: true });
+      }
+      for (const x of planned) rows.push({ t, sec: Math.max(0, (x.board - now) / 1000), est: true, bus: null, de: null, gone, plan: x });
+
       if (!buses.length && !hasEta) {
-        idle.push({ t, e });
+        if (!planned.length) idle.push({ t, e });
         continue;
       }
       const firstSec = hasEta ? Math.max(0, e.EstimateTime - gone) : null;
       // 每站大約幾秒（給後面幾班推估用）
       let perStop = 90;
-      if (firstSec != null && buses[0] && buses[0].left > 0) perStop = Math.min(150, Math.max(40, firstSec / buses[0].left));
+      if (firstSec != null && buses[0] && buses[0].left > 0) learnedPerStop[t.route] = perStop = Math.min(150, Math.max(40, firstSec / buses[0].left));
       if (!buses.length) rows.push({ t, sec: firstSec, est: false, bus: null, de, gone });
       buses.forEach((b, i) => {
         if (i === 0) rows.push({ t, sec: firstSec ?? Math.max(0, b.left * perStop - gone), est: firstSec == null, bus: b, de, gone });
@@ -522,7 +606,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     $('dayWk').setAttribute('aria-pressed', schedDay === 'wk');
     $('dayHol').setAttribute('aria-pressed', schedDay === 'hol');
     const now = Date.now();
-    const known = last ? new Set(last.trips.map((t) => t.route)) : null;
+    const known = last ? new Set(buildTrips(last.routes, 'back').map((t) => t.route)) : null;
     const f = tfActive();
     let list = TIMETABLE[schedDay].map(([route, tm, to]) => ({ route, tm, to, ts: atToday(tm) }));
     if (f && f.basis === 'stop') list = list.filter((x) => inWindow({ sec: (x.ts - now) / 1000 }, f, now));
@@ -587,11 +671,13 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     return '目前沒有資料';
   }
 
-  function rowHTML({ t, sec, est, bus, arr, last: isLast }) {
+  function rowHTML({ t, sec, est, bus, arr, last: isLast, plan }) {
     const min = Math.floor(sec / 60);
     const atStop = bus && bus.left === 0;
     let led;
-    if (atStop || (!est && sec < 60)) led = `<div class="led soon word"><span class="big">進站中</span></div>`;
+    if (plan && min >= 60) led = `<div class="led dim word"><span class="big">${hhmm(new Date(Date.now() + sec * 1000))}</span>
+        <span class="at">約 ${Math.floor(min / 60)} 小時 ${min % 60} 分</span></div>`;
+    else if (atStop || (!est && sec < 60)) led = `<div class="led soon word"><span class="big">進站中</span></div>`;
     else led = `<div class="led ${!est && min <= 3 ? 'soon' : ''} ${est ? 'dim' : ''}">
         <span class="big">${est ? '約' : ''}${min}</span><span class="unit">分</span>
         <span class="at">${hhmm(new Date(Date.now() + sec * 1000))} 到</span></div>`;
@@ -603,6 +689,10 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
       where = atStop
         ? `<div class="where">車子已經到 <strong>${esc(t.from.name)}</strong></div>`
         : `<div class="where">${state} <strong>${esc(p.StopName.Zh_tw)}</strong> <span class="away">· 還有 ${bus.left} 站</span></div>`;
+    } else if (plan && plan.tdx) {
+      where = `<div class="where">尚未發車 <span class="away">· 公車業者預估到站</span></div>`;
+    } else if (plan) {
+      where = `<div class="where">${hhmm(new Date(plan.dep))} 從 <strong>${esc(plan.origin)}</strong> 發車 <span class="away">· ${plan.exact ? '時刻表' : plan.freq ? '依班距推估' : '依時刻表推估'}</span></div>`;
     } else {
       where = `<div class="where">即將來車 <span class="away">· 目前沒有車子位置</span></div>`;
     }
@@ -626,7 +716,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
           ${walkTo ? `<span>${walkTo}</span>` : ''}
           ${arrive ? `<span>${arrive}</span>` : ''}
           ${isLast ? '<span class="chip last">最晚這班</span>' : ''}
-          ${est ? '<span class="chip">推估</span>' : ''}
+          ${plan ? '<span class="chip">尚未發車</span>' : est ? '<span class="chip">推估</span>' : ''}
           ${bus ? `<span>${esc(bus.p.PlateNumb)}</span>` : ''}
         </div>
       </div>
@@ -686,9 +776,10 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     $('title').innerHTML = d === 'go'
       ? '埔坪<span class="arrow">→</span>馬偕醫學大學'
       : '馬偕醫學大學<span class="arrow">→</span>埔坪';
-    last = null;
     paintTf();
     stopRing();
+    // 已經有資料（兩個方向一起抓的）就直接重畫，不再查一次
+    if (last && Date.now() - last.at < interval() * 1000) { render(); return; }
     $('list').innerHTML = '<div class="empty">正在抓公車資料…</div>';
     $('idleWrap').hidden = true;
     renderSched();
@@ -706,11 +797,8 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     onlyMmu = !onlyMmu;
     ls.set('pp.onlyMmu', onlyMmu);
     paintFilters();
-    last = null;
-    $('list').innerHTML = '<div class="empty">正在抓公車資料…</div>';
-    $('idleWrap').hidden = true;
-    $('tfNote').hidden = true;
-    refresh();
+    stopRing();
+    render();
   };
   function paintTf() {
     const f = tf[dir];
@@ -859,7 +947,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     updateUsage(); schedule();
   };
   $('reloadRoutes').onclick = async () => {
-    try { await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
+    try { ls.del('pp.sched.v1'); sched = null; await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
   };
 
   setInterval(tick, 1000);
