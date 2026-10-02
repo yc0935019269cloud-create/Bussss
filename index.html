@@ -64,12 +64,13 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
 .clock { font-family: var(--font-num); font-size: 1.15rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* 方向：兩張大卡片 */
-.dir-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dir-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .dir-tab {
   border: 1.5px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 12px 14px; cursor: pointer;
   text-align: left; display: grid; gap: 2px; box-shadow: var(--shadow); transition: background .15s, border-color .15s;
 }
-.dir-tab .k { font-family: var(--font-hand); font-size: 1.25rem; font-weight: 700; }
+.dir-tab .k { font-family: var(--font-hand); font-size: 1.2rem; font-weight: 700; }
+@media (max-width: 420px) { .dir-tab { padding: 10px 10px; } .dir-tab .k { font-size: 1.05rem; } .dir-tab .v { font-size: .74rem; } }
 .dir-tab .v { font-size: .82rem; color: var(--muted); }
 .dir-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .dir-tab[aria-pressed="true"] .v { color: inherit; opacity: .85; }
@@ -260,8 +261,9 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   <h1 id="title">埔坪→馬偕醫學大學</h1>
 
   <nav class="dir-tabs" aria-label="方向">
-    <button class="dir-tab" id="dirGo" type="button" aria-pressed="true"><span class="k">上學去</span><span class="v">埔坪 → 馬偕醫學大學</span></button>
-    <button class="dir-tab" id="dirBack" type="button" aria-pressed="false"><span class="k">回家囉</span><span class="v">馬偕醫學大學 → 埔坪</span></button>
+    <button class="dir-tab" id="dirGo" type="button" aria-pressed="true"><span class="k">上學去</span><span class="v">埔坪 → 馬偕</span></button>
+    <button class="dir-tab" id="dirSz" type="button" aria-pressed="false"><span class="k">三芝出發</span><span class="v">三芝站 → 馬偕</span></button>
+    <button class="dir-tab" id="dirBack" type="button" aria-pressed="false"><span class="k">回家囉</span><span class="v">馬偕 → 埔坪</span></button>
   </nav>
 
   <div class="chips" role="toolbar" aria-label="快速設定">
@@ -398,6 +400,11 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   const API = 'https://tdx.transportdata.tw/api/basic/v2/Bus/';
   const TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
   const HOME = '埔坪';
+  // 每個方向的出發／回程站（依偏好排序）；sz = 從三芝站去學校
+  const ORIGINS = { go: [HOME], sz: ['三芝站', '三芝'], back: [HOME] };
+  const ALL_ORIGIN_NAMES = [...new Set(Object.values(ORIGINS).flat())];
+  const toSchool = (d) => d !== 'back';
+  const DIR_TITLE = { go: '埔坪→馬偕醫學大學', sz: '三芝站→馬偕醫學大學', back: '馬偕醫學大學→埔坪' };
   // 學校端的站，依偏好排序（校內站優先）
   const SCHOOL = ['馬偕醫學大學', '馬偕專校三芝校區', '馬偕護專三芝校區'];
   const WALK = { '馬偕護專三芝校區': '步行約 7 分鐘到校' };
@@ -468,7 +475,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   let onlyMmu = !!ls.get('pp.onlyMmu', false);
   // 時間篩選，上學/回家各存一組：from = 最早幾點上車，to = 最晚幾點要到
   const TF0 = { from: '', to: '' };
-  const tf = { go: { ...TF0, ...ls.get('pp.tf2.go', {}) }, back: { ...TF0, ...ls.get('pp.tf2.back', {}) } };
+  const tf = Object.fromEntries(['go', 'sz', 'back'].map((d) => [d, { ...TF0, ...ls.get('pp.tf2.' + d, {}) }]));
   const schoolStops = () => (onlyMmu ? SCHOOL.slice(0, 1) : SCHOOL);
   let timer = null, nextAt = 0, busy = false, last = null, sched = null;
 
@@ -525,15 +532,15 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
 
   // ---- 路線資料（經過埔坪的所有路線，一天抓一次） ----
   async function loadRoutes(force) {
-    const c = ls.get('pp.routes.v1');
+    const c = ls.get('pp.routes.v2');
     if (!force && c && c.d === today() && c.data.length) return c.data;
-    const raw = await api(`StopOfRoute/City/${CITY}?$filter=` + encodeURIComponent(`Stops/any(s: s/StopName/Zh_tw eq '${HOME}')`));
+    const raw = await api(`StopOfRoute/City/${CITY}?$filter=` + encodeURIComponent(`Stops/any(s: ${ALL_ORIGIN_NAMES.map((n) => `s/StopName/Zh_tw eq '${n}'`).join(' or ')})`));
     const data = raw.map((x) => ({
       routeUID: x.RouteUID, route: x.RouteName.Zh_tw, subUID: x.SubRouteUID, sub: x.SubRouteName?.Zh_tw || x.RouteName.Zh_tw,
       dir: x.Direction,
       stops: x.Stops.map((s) => ({ uid: s.StopUID, name: s.StopName.Zh_tw, seq: s.StopSequence })),
     }));
-    ls.set('pp.routes.v1', { d: today(), data });
+    ls.set('pp.routes.v2', { d: today(), data });
     return data;
   }
 
@@ -605,10 +612,10 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     const groups = new Map();
     for (const r of routes) {
       const st = r.stops;
-      const homeIdx = st.findIndex((s) => s.name === HOME);
+      const homeIdx = ORIGINS[which].map((n) => st.findIndex((s) => s.name === n)).find((i) => i >= 0) ?? -1;
       if (homeIdx < 0) continue;
       let from, to;
-      if (which === 'go') {
+      if (toSchool(which)) {
         const cands = st.map((s, i) => ({ s, i })).filter(({ s, i }) => i > homeIdx && SCH.includes(s.name));
         if (!cands.length) continue;
         cands.sort((a, b) => SCH.indexOf(a.s.name) - SCH.indexOf(b.s.name) || a.i - b.i);
@@ -640,7 +647,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     try {
       const routes = await loadRoutes(false);
       // 上學、回家、有沒有勾「只顯示馬偕醫學大學站」都一起抓，切換時就不用再查
-      const all = [...buildTrips(routes, 'go', SCHOOL), ...buildTrips(routes, 'back', SCHOOL)];
+      const all = ['go', 'sz', 'back'].flatMap((d) => buildTrips(routes, d, SCHOOL));
       if (!all.length) throw new Error('找不到經過埔坪和馬偕的路線資料，請在「設定」按「重新抓路線資料」。');
       const stopUIDs = [...new Set(all.flatMap((t) => [t.from.uid, t.to.uid]))];
       const routeNames = [...new Set(all.map((t) => t.route))];
@@ -672,7 +679,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     const trips = buildTrips(routes, dir);
     const now = Date.now();
     if (!trips.length) {
-      $('list').innerHTML = `<div class="empty">${onlyMmu ? '沒有經過埔坪和馬偕醫學大學站的路線。可以關掉「只顯示馬偕醫學大學站」再看看。' : '沒有符合的路線。'}</div>`;
+      $('list').innerHTML = `<div class="empty">${onlyMmu ? '沒有停馬偕醫學大學站的路線，<br>可以關掉「只看校內站」再看看。' : dir === 'sz' ? '找不到從三芝站到學校的路線。' : '沒有符合的路線。'}</div>`;
       $('idleWrap').hidden = true; $('tfNote').hidden = true;
       checkAlarm([]); bigRows = { rows: [], at: now }; renderSched();
       return;
@@ -696,12 +703,12 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
 
       // 選了別的日期：沒有即時資料，只列時刻表推估
       if (!isToday()) {
-        if (dir === 'go' && sched) for (const x of scheduledBoards(t, sched, now)) rows.push({ t, sec: (x.board - now) / 1000, est: true, bus: null, de: null, gone, plan: x, future: true });
+        if (toSchool(dir) && sched) for (const x of scheduledBoards(t, sched, now)) rows.push({ t, sec: (x.board - now) / 1000, est: true, bus: null, de: null, gone, plan: x, future: true });
         continue;
       }
 
       // 上學方向：用時刻表推估還沒發車的班次（像 Google 地圖）
-      let planned = dir === 'go' && sched ? scheduledBoards(t, sched, now) : [];
+      let planned = toSchool(dir) && sched ? scheduledBoards(t, sched, now) : [];
       planned = planned.filter((x) => x.board - now < (tfActive() ? 18 : 3) * 3600000);
       // TDX 對「尚未發車」那班有自己的預估，用它取代時刻表裡最接近的那班
       if (e && e.StopStatus === 1 && Number.isFinite(e.EstimateTime) && e.EstimateTime - gone > 0) {
@@ -909,8 +916,8 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     let arrive = '';
     if (sec != null) arrive = `約 ${hhmm(new Date(Date.now() + arr * 1000))} 到${esc(t.to.name)}`;
     const walkFrom = WALK[t.from.name] && dir === 'back' ? `<span class="chip">步行</span> 在${esc(t.from.name)}上車` : '';
-    const walkTo = WALK[t.to.name] && dir === 'go' ? `<span class="chip">步行</span> 在${esc(t.to.name)}下車，${WALK[t.to.name]}` : '';
-    const side = dir === 'go' ? `在埔坪上車（往${esc(t.next)}那側）` : '';
+    const walkTo = WALK[t.to.name] && toSchool(dir) ? `<span class="chip">步行</span> 在${esc(t.to.name)}下車，${WALK[t.to.name]}` : '';
+    const side = toSchool(dir) ? `在${esc(t.from.name)}上車（往${esc(t.next)}那側）` : '';
 
     return `<article class="bus ${hero ? 'hero' : ''}">
       ${hero ? `<span class="hero-tag">${isToday() ? '下一班' : '第一班'}</span>` : ''}
@@ -1051,8 +1058,9 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   function setDir(d) {
     dir = d;
     $('dirGo').setAttribute('aria-pressed', d === 'go');
+    $('dirSz').setAttribute('aria-pressed', d === 'sz');
     $('dirBack').setAttribute('aria-pressed', d === 'back');
-    $('title').textContent = d === 'go' ? '埔坪→馬偕醫學大學' : '馬偕醫學大學→埔坪';
+    $('title').textContent = DIR_TITLE[d];
     paintTf();
     stopRing();
     // 已經有資料（兩個方向一起抓的）就直接重畫，不再查一次
@@ -1063,6 +1071,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     refresh();
   }
   $('dirGo').onclick = () => dir !== 'go' && setDir('go');
+  $('dirSz').onclick = () => dir !== 'sz' && setDir('sz');
   $('dirBack').onclick = () => dir !== 'back' && setDir('back');
   $('refreshBtn').onclick = () => refresh();
 
@@ -1097,7 +1106,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     const on = !!(f.from || f.to);
     $('chipTimeTxt').textContent = on ? tfLabel(f) : '時間不限';
     $('chipTime').classList.toggle('on', on);
-    $('tfHelp').textContent = dir === 'go'
+    $('tfHelp').textContent = toSchool(dir)
       ? '例如 8:10 要到學校，就在「最晚幾點要到」填 08:10。'
       : '例如 17:00 才下課，就在「最早幾點上車」填 17:00。';
   }
