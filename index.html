@@ -486,7 +486,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   const TF0 = { from: '', to: '' };
   const tf = Object.fromEntries(['go', 'sz', 'back'].map((d) => [d, { ...TF0, ...ls.get('pp.tf2.' + d, {}) }]));
   const schoolStops = () => (onlyMmu ? SCHOOL.slice(0, 1) : SCHOOL);
-  let timer = null, nextAt = 0, busy = false, last = null, sched = null, schedTriedAt = 0, schedFailed = false;
+  let timer = null, nextAt = 0, busy = false, last = null, sched = null, tdxSched = null, schedTriedAt = 0, schedFailed = false;
 
   // ---- API ----
   // 內建的 TDX 金鑰（擁有者提供，免費方案）；設定裡填別的金鑰會優先使用
@@ -577,6 +577,51 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     ls.set('pp.sched.v1', { d: today(), data });
     return data;
   }
+  // ---- 學校公告的發車時刻（補 TDX 時刻表的不足） ----
+  // 882 從馬偕醫學大學發車，開到捷運紅樹林站後再開回學校（中途經過埔坪）。
+  // 學校端發車時刻就是整條路線的班表；另外平日 18:00 有一班從紅樹林發車。
+  const LOOP_ROUTES = {
+    882: {
+      wk: ['6:00', '7:00', '8:00', '8:30', '16:30', '17:45', '19:00', '20:00'],
+      hol: ['7:00', '8:00', '8:30', '16:30', '17:30', '19:00', '20:00'],
+      farWk: ['18:00'], // 平日從捷運紅樹林站發車
+      layover: 5,       // 在紅樹林折返休息幾分鐘（估計）
+    },
+  };
+  const WK_DAYS = { Sunday: 0, Monday: 1, Tuesday: 1, Wednesday: 1, Thursday: 1, Friday: 1, Saturday: 0, NationalHolidays: 0 };
+  const HOL_DAYS = { Sunday: 1, Monday: 0, Tuesday: 0, Wednesday: 0, Thursday: 0, Friday: 0, Saturday: 1, NationalHolidays: 1 };
+  function addMin(hm, m) {
+    const [h, mm] = hm.split(':').map(Number);
+    const t = h * 60 + mm + Math.round(m);
+    return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+  }
+  const isSchool = (s) => SCHOOL.includes(s.name);
+  // 合併 TDX 時刻表和學校公告的班表；有公告的路線以公告為準
+  function buildSched(tdx, routes) {
+    let out = (tdx || []).map((x) => ({ ...x, src: 'tdx' }));
+    for (const [name, cfg] of Object.entries(LOOP_ROUTES)) {
+      const rs = routes.filter((r) => r.route === name);
+      // 學校 → 紅樹林那個方向：學校之後還有幾站（用來估算繞回來的時間）
+      const outbound = rs.find((r) => { const a = r.stops.findIndex(isSchool), b = r.stops.findIndex((x) => x.name === HOME); return a >= 0 && (b < 0 || a < b); });
+      const loopMin = (outbound ? outbound.stops.length - 1 - outbound.stops.findIndex(isSchool) : 25) * 80 / 60 + cfg.layover;
+      const syn = [];
+      for (const r of rs) {
+        const si = r.stops.findIndex(isSchool), hi = r.stops.findIndex((x) => x.name === HOME);
+        if (si < 0) continue;
+        const mk = (times, days, stop, shift) => times.map((t) => ({ days, st: [{ uid: stop.uid, name: stop.name, seq: stop.seq, time: addMin(t, shift) }] }));
+        let tt;
+        if (hi < 0 || si < hi) tt = [...mk(cfg.wk, WK_DAYS, r.stops[si], 0), ...mk(cfg.hol, HOL_DAYS, r.stops[si], 0)];
+        else tt = [...mk(cfg.wk, WK_DAYS, r.stops[0], loopMin), ...mk(cfg.hol, HOL_DAYS, r.stops[0], loopMin), ...mk(cfg.farWk || [], WK_DAYS, r.stops[0], 0)];
+        syn.push({ routeUID: r.routeUID, subUID: r.subUID, dir: r.dir, tt, fq: [], src: 'school' });
+      }
+      if (syn.length) {
+        const uids = new Set(syn.map((x) => x.routeUID));
+        out = out.filter((x) => !uids.has(x.routeUID)).concat(syn);
+      }
+    }
+    return out;
+  }
+
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   function runsToday(days) {
     if (!days) return true;
@@ -664,11 +709,13 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
       const pos = await api(`RealTimeNearStop/City/${CITY}?` + orFilter('RouteName/Zh_tw', routeNames));
       last = { routes, eta, pos, at: Date.now() };
       render();
-      // 時刻表：還沒有、或上次失敗超過 1 分鐘就再抓
-      if (!sched && Date.now() - schedTriedAt > 60000) {
+      // 時刻表：先用學校公告的班表；TDX 的還沒有、或上次失敗超過 1 分鐘就再抓
+      if (!sched) { sched = buildSched(null, routes); render(); }
+      if (!tdxSched && Date.now() - schedTriedAt > 60000) {
         schedTriedAt = Date.now();
-        sched = await loadSchedule(routes.filter((r) => all.some((t) => t.routeUID === r.routeUID)));
-        schedFailed = !sched;
+        tdxSched = await loadSchedule(routes.filter((r) => all.some((t) => t.routeUID === r.routeUID)));
+        schedFailed = !tdxSched;
+        sched = buildSched(tdxSched, routes);
         render();
       }
       const upd = [...eta, ...pos].map((x) => Date.parse(x.UpdateTime || x.SrcUpdateTime)).filter(Boolean);
@@ -834,9 +881,15 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
         <span class="cd">${cd}</span>
       </div>`;
     }).join('') : `<div class="empty">${f ? '這個時間範圍內沒有班次。' : noData.length === trips.length ? 'TDX 沒有這些路線的時刻表。' : '今天的班次都過了。'}</div>`;
-    const routesWith = [...new Set(trips.map((t) => t.route))].filter((r) => !noData.includes(r));
-    $('planNote').textContent = (routesWith.length ? `時刻表來自 TDX（${routesWith.join('、')}）。標「推估」的是用起站發車時間加上沿途站數換算的上車時間。` : '')
-      + (noData.length ? ` TDX 沒有提供 ${[...new Set(noData)].join('、')} 的時刻表。` : '');
+    const srcOf = (t) => sched.find((s) => s.routeUID === t.routeUID && s.dir === t.dir && (s.tt.length || s.fq.length))?.src;
+    const fromSchool = [...new Set(trips.filter((t) => srcOf(t) === 'school').map((t) => t.route))];
+    const fromTdx = [...new Set(trips.filter((t) => srcOf(t) === 'tdx').map((t) => t.route))];
+    $('planNote').textContent = [
+      fromSchool.length && `${fromSchool.join('、')} 用學校公告的發車時刻推算（從學校繞到紅樹林再回來）。`,
+      fromTdx.length && `${fromTdx.join('、')} 的時刻表來自 TDX。`,
+      '標「推估」的是用起站發車時間加上沿途站數換算的上車時間，實際以即時動態為準。',
+      noData.length && `TDX 沒有提供 ${[...new Set(noData)].join('、')} 的時刻表。`,
+    ].filter(Boolean).join(' ');
   }
   $('planAll').onclick = () => { planAll = !planAll; renderPlan(); };
 
@@ -1308,7 +1361,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     updateUsage(); schedule();
   };
   $('reloadRoutes').onclick = async () => {
-    try { ls.del('pp.sched.v1'); sched = null; schedTriedAt = 0; await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
+    try { ls.del('pp.sched.v1'); sched = null; tdxSched = null; schedTriedAt = 0; await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
   };
 
   setInterval(tick, 1000);
