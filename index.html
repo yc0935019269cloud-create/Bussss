@@ -161,6 +161,23 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
 .sched-row.past { opacity: .45; }
 .sched-row.nohome .plate { background: var(--line); color: var(--muted); }
 .sched .foot { margin: 0; }
+.big-view {
+  position: fixed; inset: 0; z-index: 20; background: var(--led-bg); color: var(--led);
+  display: grid; grid-template-rows: auto 1fr auto; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+.big-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #c9d2cd; }
+.big-top .clock { color: #c9d2cd; font-size: 1.3rem; }
+.big-close { font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; background: #2a332e; color: #fff; }
+.big-main { display: grid; place-content: center; text-align: center; gap: 10px; min-width: 0; }
+.big-route { justify-self: center; background: var(--accent); color: #fff; font-weight: 700; font-size: clamp(1.6rem, 7vw, 3rem); border-radius: 10px; padding: 2px 18px; }
+.big-min { font-family: var(--font-led); font-size: clamp(6rem, 34vw, 18rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.big-min small { font-size: .3em; margin-left: .1em; }
+.big-min.soon { color: var(--led-soon); }
+.big-min.word { font-size: clamp(3.5rem, 18vw, 9rem); }
+.big-sub { color: #c9d2cd; font-size: clamp(1rem, 4vw, 1.5rem); }
+.big-next { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; color: #c9d2cd; font-size: clamp(.95rem, 3.6vw, 1.25rem); }
+.big-next b { color: var(--led); font-family: var(--font-led); font-weight: 400; }
+@media (prefers-reduced-motion: no-preference) { .big-min.soon { animation: blink 1.2s steps(2, start) infinite; } }
 .empty { color: var(--muted); padding: 18px; text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); }
 
 details.settings { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px; }
@@ -200,6 +217,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
         <button id="dirBack" type="button" aria-pressed="false">回家</button>
       </div>
       <button class="btn" id="refreshBtn" type="button">立即更新</button>
+      <button class="btn" id="bigBtn" type="button">全螢幕倒數</button>
       <span class="status" id="status">讀取中…</span>
     </div>
     <div class="alarmbar">
@@ -224,6 +242,16 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
       </span>
     </div>
   </header>
+
+  <div class="big-view" id="big" role="dialog" aria-label="全螢幕倒數" hidden>
+    <div class="big-top"><span class="clock" id="bigClock">--:--:--</span><button class="big-close" id="bigClose" type="button">關閉全螢幕</button></div>
+    <div class="big-main">
+      <span class="big-route" id="bigRoute" hidden></span>
+      <div class="big-min" id="bigMin">--</div>
+      <div class="big-sub" id="bigSub"></div>
+    </div>
+    <div class="big-next" id="bigNext"></div>
+  </div>
 
   <div class="ring" id="ring" role="alert" hidden>
     <div class="ring-text"><span id="ringText"></span><span class="ring-sub" id="ringSub"></span></div>
@@ -260,12 +288,13 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   </section>
 
   <details class="settings" id="settings">
-    <summary>設定（TDX 金鑰）</summary>
+    <summary>設定（TDX 金鑰，已內建，不用填）</summary>
     <div class="inner">
       <ol>
         <li>到 <a href="https://tdx.transportdata.tw/" target="_blank" rel="noopener">TDX 運輸資料流通服務平臺</a> 免費註冊會員並登入。</li>
         <li>在會員中心找到「API 金鑰」，複製 Client Id 和 Client Secret。</li>
         <li>貼到下面按「儲存」。金鑰只存在這台電腦的瀏覽器裡。</li>
+        <li>不填也可以，網頁已經內建一組金鑰。「清除金鑰」會改回內建的。</li>
       </ol>
       <label for="cid">Client Id<input id="cid" autocomplete="off" spellcheck="false"></label>
       <label for="csec">Client Secret<input id="csec" type="password" autocomplete="off" spellcheck="false"></label>
@@ -328,7 +357,9 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   let timer = null, nextAt = 0, busy = false, last = null, sched = null;
 
   // ---- API ----
-  function cred() { return ls.get('pp.cred'); }
+  // 內建的 TDX 金鑰（擁有者提供，免費方案）；設定裡填別的金鑰會優先使用
+  const DEFAULT_CRED = { id: 'yc0935019269cloud-53cdfd47-8819-461a', secret: '760b8dc4-1215-41ea-9675-120e856e2592' };
+  function cred() { return ls.get('pp.cred') || DEFAULT_CRED; }
 
   let tokenP = null;
   function token() {
@@ -521,7 +552,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     if (!trips.length) {
       $('list').innerHTML = `<div class="empty">${onlyMmu ? '沒有經過埔坪和馬偕醫學大學站的路線。可以關掉「只顯示馬偕醫學大學站」再看看。' : '沒有符合的路線。'}</div>`;
       $('idleWrap').hidden = true; $('tfNote').hidden = true;
-      checkAlarm([]); renderSched();
+      checkAlarm([]); bigRows = { rows: [], at: now }; renderSched();
       return;
     }
     const gone = (now - at) / 1000; // 資料抓下來後過了幾秒
@@ -577,6 +608,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
       shown.reduce((m, r) => (r.arr > m.arr ? r : m)).last = true;
     }
     checkAlarm(shown);
+    bigRows = { rows: shown, at: now };
 
     $('tfNote').hidden = !(f && hiddenN && shown.length);
     $('tfNote').textContent = f ? `已依抵達時間（${tfLabel(f)}）隱藏 ${hiddenN} 班` : '';
@@ -745,7 +777,76 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     nextAt = Date.now() + interval() * 1000;
     timer = setTimeout(() => { if (document.visibilityState === 'visible' || alarm.on) refresh(); else nextAt = 0; }, interval() * 1000);
   }
+  // ---- 全螢幕倒數 ----
+  let bigRows = { rows: [], at: 0 }, wake = null;
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch {}
+  }
+  function openBig() {
+    $('big').hidden = false;
+    document.body.style.overflow = 'hidden';
+    const el = document.documentElement;
+    try { (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {}); } catch {}
+    keepAwake();
+    paintBig();
+  }
+  function closeBig() {
+    $('big').hidden = true;
+    document.body.style.overflow = '';
+    try { if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch {}
+    try { wake && wake.release(); } catch {}
+    wake = null;
+  }
+  $('bigBtn').onclick = openBig;
+  $('bigClose').onclick = closeBig;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('big').hidden) closeBig(); });
+  // 用系統的方式（返回鍵、Esc）離開全螢幕時，也一起關掉
+  const onFsChange = () => { if (!document.fullscreenElement && !document.webkitFullscreenElement && !$('big').hidden) closeBig(); };
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !$('big').hidden) keepAwake(); });
+
+  function paintBig() {
+    if ($('big').hidden) return;
+    const now = Date.now();
+    $('bigClock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+    const left = (r) => Math.max(0, r.sec - (now - bigRows.at) / 1000);
+    const rows = bigRows.rows;
+    const r = rows[0];
+    const m = $('bigMin');
+    if (!r) {
+      $('bigRoute').hidden = true;
+      m.className = 'big-min word';
+      // 回家方向沒有即時車時，改顯示學校時刻表的下一班
+      const nx = dir === 'back' ? TIMETABLE[schedDay].map(([route, tm, to]) => ({ route, tm, to, ts: atToday(tm) })).find((x) => x.ts >= now) : null;
+      if (nx) {
+        const d = Math.max(0, Math.round((nx.ts - now) / 60000));
+        $('bigRoute').hidden = false; $('bigRoute').textContent = nx.route;
+        m.className = 'big-min';
+        m.innerHTML = `${d}<small>分</small>`;
+        $('bigSub').textContent = `${nx.tm.padStart(5, '0')} 從馬偕醫學大學發車（時刻表）· 往${nx.to}`;
+      } else {
+        m.textContent = last ? '目前沒車' : '讀取中';
+        $('bigSub').textContent = last ? '看看主畫面的其他路線狀態' : '';
+      }
+      $('bigNext').innerHTML = '';
+      return;
+    }
+    const sec = left(r);
+    const min = Math.floor(sec / 60);
+    const atStop = r.bus && r.bus.left === 0;
+    $('bigRoute').hidden = false;
+    $('bigRoute').textContent = r.t.route;
+    if (atStop || (!r.est && sec < 60)) { m.className = 'big-min soon word'; m.textContent = '進站中'; }
+    else if (r.plan && min >= 60) { m.className = 'big-min word'; m.textContent = hhmm(new Date(now + sec * 1000)); }
+    else { m.className = 'big-min' + (!r.est && min <= 3 ? ' soon' : ''); m.innerHTML = `${r.est ? '約' : ''}${min}<small>分</small>`; }
+    $('bigSub').textContent = `${hhmm(new Date(now + sec * 1000))} 到${r.t.from.name}` +
+      (r.plan ? '（尚未發車）' : r.est ? '（推估）' : '') + ` · 約 ${hhmm(new Date(now + (r.arr - (now - bigRows.at) / 1000) * 1000))} 到${r.t.to.name}`;
+    $('bigNext').innerHTML = rows.slice(1, 4).map((x, i) => `<span>${i ? "" : "接著 "}${esc(x.t.route)} <b>${x.est ? '約' : ''}${Math.floor(left(x) / 60)}</b> 分</span>`).join('');
+  }
+
   function tick() {
+    paintBig();
     $('clock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
     const base = $('status').dataset.base || '';
     if (busy) return;
@@ -934,7 +1035,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   // ---- 設定 ----
   const c0 = cred();
-  if (c0) { $('cid').value = c0.id; $('csec').value = c0.secret; }
+  if (c0 && c0 !== DEFAULT_CRED) { $('cid').value = c0.id; $('csec').value = c0.secret; }
   $('saveKey').onclick = () => {
     const id = $('cid').value.trim(), secret = $('csec').value.trim();
     if (!id || !secret) { $('usage').textContent = '兩個欄位都要填。'; return; }
