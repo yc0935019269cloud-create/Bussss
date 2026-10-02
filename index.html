@@ -362,6 +362,15 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     <p class="foot">請提前 5～10 分鐘到站候車。灰色路線章是不經過埔坪的路線。</p>
   </section>
 
+  <section class="sched" id="planWrap" hidden>
+    <div class="sched-head">
+      <p class="section-label" id="planTitle">今天往學校的班次</p>
+    </div>
+    <div id="plan"></div>
+    <div class="row"><button class="btn" id="planAll" type="button">顯示全部班次</button></div>
+    <p class="foot" id="planNote"></p>
+  </section>
+
   <section class="idle" id="idleWrap" hidden>
     <p class="section-label">其他路線</p>
     <div id="idle"></div>
@@ -477,7 +486,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   const TF0 = { from: '', to: '' };
   const tf = Object.fromEntries(['go', 'sz', 'back'].map((d) => [d, { ...TF0, ...ls.get('pp.tf2.' + d, {}) }]));
   const schoolStops = () => (onlyMmu ? SCHOOL.slice(0, 1) : SCHOOL);
-  let timer = null, nextAt = 0, busy = false, last = null, sched = null;
+  let timer = null, nextAt = 0, busy = false, last = null, sched = null, schedTriedAt = 0, schedFailed = false;
 
   // ---- API ----
   // 內建的 TDX 金鑰（擁有者提供，免費方案）；設定裡填別的金鑰會優先使用
@@ -563,7 +572,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
           .filter((f) => f.start && f.end && f.gap > 0),
       }));
     } catch {
-      return []; // 抓不到就先不推估，重新整理頁面時再試（不存起來）
+      return null; // 抓不到：下次更新再試
     }
     ls.set('pp.sched.v1', { d: today(), data });
     return data;
@@ -579,7 +588,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
 
   // 依時刻表推估：每個班次「在上車站的時間」
   const learnedPerStop = {}; // 路線 → 每站幾秒（從即時資料學來的）
-  function scheduledBoards(t, sched, now) {
+  function scheduledBoards(t, sched, now, includePast = false) {
     const out = [];
     const per = learnedPerStop[t.route] || 80;
     for (const s of sched) {
@@ -592,13 +601,13 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
         const first = tt.st[0];
         const dep = atToday(first.time);
         const board = here ? atToday(here.time) : dep + Math.max(0, sub.fromSeq - first.seq) * per * 1000;
-        if (!isToday() || dep > now) out.push({ dep, board, origin: first.name || origin, exact: !!here });
+        if (includePast || !isToday() || dep > now) out.push({ dep, board, origin: first.name || origin, exact: !!here });
       }
       for (const f of s.fq) {
         if (!runsToday(f.days)) continue;
         const end = atToday(f.end);
         for (let dep = atToday(f.start); dep <= end; dep += f.gap * 60000) {
-          if (!isToday() || dep > now) out.push({ dep, board: dep + Math.max(0, sub.fromSeq - 1) * per * 1000, origin, exact: false, freq: true });
+          if (includePast || !isToday() || dep > now) out.push({ dep, board: dep + Math.max(0, sub.fromSeq - 1) * per * 1000, origin, exact: false, freq: true });
         }
       }
     }
@@ -655,9 +664,12 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
       const pos = await api(`RealTimeNearStop/City/${CITY}?` + orFilter('RouteName/Zh_tw', routeNames));
       last = { routes, eta, pos, at: Date.now() };
       render();
-      if (!sched) {
+      // 時刻表：還沒有、或上次失敗超過 1 分鐘就再抓
+      if (!sched && Date.now() - schedTriedAt > 60000) {
+        schedTriedAt = Date.now();
         sched = await loadSchedule(routes.filter((r) => all.some((t) => t.routeUID === r.routeUID)));
-        if (sched.length) render();
+        schedFailed = !sched;
+        render();
       }
       const upd = [...eta, ...pos].map((x) => Date.parse(x.UpdateTime || x.SrcUpdateTime)).filter(Boolean);
       $('status').dataset.base = upd.length ? '資料時間 ' + hhmm(new Date(Math.max(...upd))) : '';
@@ -709,7 +721,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
 
       // 上學方向：用時刻表推估還沒發車的班次（像 Google 地圖）
       let planned = toSchool(dir) && sched ? scheduledBoards(t, sched, now) : [];
-      planned = planned.filter((x) => x.board - now < (tfActive() ? 18 : 3) * 3600000);
+      planned = planned.filter((x, i) => i < 3 || x.board - now < (tfActive() ? 18 : 3) * 3600000);
       // TDX 對「尚未發車」那班有自己的預估，用它取代時刻表裡最接近的那班
       if (e && e.StopStatus === 1 && Number.isFinite(e.EstimateTime) && e.EstimateTime - gone > 0) {
         const nb = now + (e.EstimateTime - gone) * 1000;
@@ -777,7 +789,59 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   const autoDay = () => (dayInfo(viewDate).off ? 'hol' : 'wk');
   const schedDayNow = () => schedOverride || autoDay();
   let schedAll = false;
+  // ---- 往學校方向：整天的班次（依時刻表推估在上車站的時間） ----
+  let planAll = false;
+  function renderPlan() {
+    const show = toSchool(dir) && !!last;
+    $('planWrap').hidden = !show;
+    if (!show) return;
+    const now = Date.now();
+    const trips = buildTrips(last.routes, dir);
+    const from = trips[0]?.from.name || '';
+    const d = new Date(viewDate + 'T12:00:00');
+    $('planTitle').textContent = `${isToday() ? '今天' : `${d.getMonth() + 1}/${d.getDate()}`}在${from}上車的班次`;
+    if (!sched) {
+      $('plan').innerHTML = `<div class="empty">${schedFailed ? '時刻表這次沒抓到，下次更新會再試。' : '正在讀取時刻表…'}</div>`;
+      $('planAll').hidden = true; $('planNote').textContent = '';
+      return;
+    }
+    const f = tfActive();
+    let list = [];
+    const noData = [];
+    for (const t of trips) {
+      const xs = scheduledBoards(t, sched, now, true);
+      if (!sched.some((s) => s.routeUID === t.routeUID && s.dir === t.dir && (s.tt.length || s.fq.length))) noData.push(t.route);
+      const ride = Math.max(1, t.to.seq - t.from.seq) * 75;
+      for (const x of xs) list.push({ t, ...x, sec: (x.board - now) / 1000, arr: (x.board - now) / 1000 + ride });
+    }
+    list.sort((a, b) => a.board - b.board);
+    if (f) list = list.filter((x) => inWindow(x, f, now));
+    const live = isToday();
+    const nextIdx = live ? list.findIndex((x) => x.board >= now - 60000) : -1;
+    const start = planAll || !live ? 0 : Math.max(0, nextIdx < 0 ? list.length : nextIdx - 1);
+    const view = planAll || !live ? list : list.slice(start, start + 8);
+    $('planAll').hidden = !live || list.length <= 8;
+    $('planAll').textContent = planAll ? '只看接下來的班次' : `顯示全部 ${list.length} 班`;
+    $('plan').innerHTML = view.length ? view.map((x) => {
+      const diff = Math.round((x.board - now) / 60000);
+      const cls = [live && x.board < now - 60000 ? 'past' : '', list.indexOf(x) === nextIdx ? 'next' : ''].join(' ');
+      const cd = !live ? '' : diff < -1 ? '已過站' : diff <= 0 ? '快到了' : diff < 60 ? `約 ${diff} 分` : `約 ${Math.floor(diff / 60)} 小時 ${diff % 60} 分`;
+      const src = x.exact ? '' : x.freq ? '・依班距' : '・推估';
+      return `<div class="sched-row ${cls}">
+        <span class="plate">${esc(x.t.route)}</span>
+        <span class="tm">${hhmm(new Date(x.board))}</span>
+        <span class="txt">${hhmm(new Date(x.dep))} ${esc(x.origin)}發車${src}・約 ${hhmm(new Date(now + x.arr * 1000))} 到校</span>
+        <span class="cd">${cd}</span>
+      </div>`;
+    }).join('') : `<div class="empty">${f ? '這個時間範圍內沒有班次。' : noData.length === trips.length ? 'TDX 沒有這些路線的時刻表。' : '今天的班次都過了。'}</div>`;
+    const routesWith = [...new Set(trips.map((t) => t.route))].filter((r) => !noData.includes(r));
+    $('planNote').textContent = (routesWith.length ? `時刻表來自 TDX（${routesWith.join('、')}）。標「推估」的是用起站發車時間加上沿途站數換算的上車時間。` : '')
+      + (noData.length ? ` TDX 沒有提供 ${[...new Set(noData)].join('、')} 的時刻表。` : '');
+  }
+  $('planAll').onclick = () => { planAll = !planAll; renderPlan(); };
+
   function renderSched() {
+    renderPlan();
     paintDay();
     $('schedWrap').hidden = dir !== 'back';
     if (dir !== 'back') return;
@@ -1244,7 +1308,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     updateUsage(); schedule();
   };
   $('reloadRoutes').onclick = async () => {
-    try { ls.del('pp.sched.v1'); sched = null; await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
+    try { ls.del('pp.sched.v1'); sched = null; schedTriedAt = 0; await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
   };
 
   setInterval(tick, 1000);
