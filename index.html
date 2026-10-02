@@ -3,256 +3,323 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>埔坪⇄馬偕 公車動態</title>
+<title>埔坪⇄馬偕 公車小站</title>
+<meta name="theme-color" content="#f4ece0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
-/* 版面：單欄看板。每班車一列，左邊路線牌、中間位置與站點軌道、右邊站牌式 LED 分鐘數 */
+/* 溫暖文青風：米色紙張、赤陶色重點、鼠尾草綠路線章；每班車像一張車票 */
 :root {
-  --bg: #eef2ef;
-  --surface: #ffffff;
-  --ink: #15201b;
-  --muted: #5b6a63;
-  --line: #d6dfd9;
-  --accent: #0b7a55;      /* 路線牌綠 */
-  --accent-ink: #ffffff;
-  --led-bg: #111613;      /* 站牌 LED 面板 */
-  --led: #ffb31a;
-  --led-soon: #ff5d4f;
-  --warn-bg: #fff4dc;
-  --warn-ink: #7a5200;
-  --font-body: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
-  --font-led: "DotGothic16", ui-monospace, "Consolas", monospace;
-  --r: 10px;
+  --bg: #f4ece0;
+  --surface: #fffaf2;
+  --surface-2: #f9f1e4;
+  --ink: #3b2e26;
+  --muted: #8b7666;
+  --line: #e7d8c3;
+  --accent: #b4623c;      /* 赤陶 */
+  --accent-soft: #f3dccb;
+  --accent-ink: #fffaf2;
+  --stamp: #6f8a5e;       /* 鼠尾草綠路線章 */
+  --stamp-ink: #fffaf2;
+  --soon: #c2452d;
+  --warn-bg: #fbe8cf;
+  --warn-ink: #8a4b14;
+  --shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 6px 18px -10px rgba(91,60,30,.35);
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-hand: "LXGW WenKai TC", "Noto Serif TC", "Songti TC", serif;
+  --font-num: "Fraunces", "LXGW WenKai TC", Georgia, serif;
+  --r: 18px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1210; --surface: #151c19; --ink: #e5ebe7; --muted: #93a39b; --line: #26302b;
-    --accent: #2aa874; --accent-ink: #06130d; --led-bg: #070a09; --led: #ffb31a; --led-soon: #ff6b5e;
-    --warn-bg: #2d2412; --warn-ink: #f3cf86; color-scheme: dark;
+    --bg: #1d1814; --surface: #29221c; --surface-2: #231d18; --ink: #f1e5d3; --muted: #b19d88; --line: #3e342b;
+    --accent: #e08a5e; --accent-soft: #4a3326; --accent-ink: #1d1814; --stamp: #93b07f; --stamp-ink: #1d1814;
+    --soon: #ff7b5c; --warn-bg: #3a2a18; --warn-ink: #f3cf96; --shadow: 0 8px 22px -12px rgba(0,0,0,.7); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0d1210; --surface: #151c19; --ink: #e5ebe7; --muted: #93a39b; --line: #26302b;
-  --accent: #2aa874; --accent-ink: #06130d; --led-bg: #070a09; --led: #ffb31a; --led-soon: #ff6b5e;
-  --warn-bg: #2d2412; --warn-ink: #f3cf86; color-scheme: dark;
+  --bg: #1d1814; --surface: #29221c; --surface-2: #231d18; --ink: #f1e5d3; --muted: #b19d88; --line: #3e342b;
+  --accent: #e08a5e; --accent-soft: #4a3326; --accent-ink: #1d1814; --stamp: #93b07f; --stamp-ink: #1d1814;
+  --soon: #ff7b5c; --warn-bg: #3a2a18; --warn-ink: #f3cf96; --shadow: 0 8px 22px -12px rgba(0,0,0,.7); color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
-  background: var(--bg); color: var(--ink); font-family: var(--font-body);
-  font-size: 15px; line-height: 1.55; padding: 0 16px;
+  background-color: var(--bg); color: var(--ink); font-family: var(--font-body);
+  background-image: radial-gradient(rgba(139,98,60,.07) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  font-size: 15px; line-height: 1.6; padding: 0 16px;
   padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
 }
-.wrap { max-width: 760px; margin: 0 auto; padding-block: 20px 48px; display: grid; gap: 18px; }
+.wrap { max-width: 640px; margin: 0 auto; padding-block: 18px 56px; display: grid; gap: 14px; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-header { display: grid; gap: 12px; }
-.title-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
-h1 { margin: 0; font-size: 1.45rem; font-weight: 700; letter-spacing: .02em; text-wrap: balance; }
-h1 .arrow { color: var(--accent); padding-inline: .2em; }
-.clock { font-family: var(--font-led); font-size: 1.1rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* ---- 頁首 ---- */
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.brand { margin: 0; font-family: var(--font-hand); font-weight: 700; font-size: 1.35rem; letter-spacing: .04em; }
+.brand small { display: block; font-family: var(--font-body); font-weight: 400; font-size: .78rem; color: var(--muted); letter-spacing: .08em; }
+.clock { font-family: var(--font-num); font-size: 1.15rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-.seg button {
-  border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 500;
-  padding: 6px 16px; border-radius: 999px; cursor: pointer;
+/* 方向：兩張大卡片 */
+.dir-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dir-tab {
+  border: 1.5px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 12px 14px; cursor: pointer;
+  text-align: left; display: grid; gap: 2px; box-shadow: var(--shadow); transition: background .15s, border-color .15s;
 }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.dir-tab .k { font-family: var(--font-hand); font-size: 1.25rem; font-weight: 700; }
+.dir-tab .v { font-size: .82rem; color: var(--muted); }
+.dir-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.dir-tab[aria-pressed="true"] .v { color: inherit; opacity: .85; }
+h1#title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* 快捷小標籤：日期／時間／鬧鈴／校內站 */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .88rem; color: var(--ink); white-space: nowrap;
+}
+.chip-btn svg { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chip-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.chip-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 10px; box-shadow: var(--shadow); }
+.panel h2 { margin: 0; font-family: var(--font-hand); font-size: 1.05rem; font-weight: 700; }
+.panel .hint-text { margin: 0; color: var(--muted); font-size: .85rem; }
+.panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.panel label.field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); flex: 1 1 140px; }
+.panel input {
+  font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px;
+}
+.panel input[type="number"] { width: 4.2em; text-align: center; }
+.daytag { border-radius: 999px; padding: 2px 10px; font-size: .85rem; background: var(--surface-2); border: 1px solid var(--line); }
+.daytag.hol { border-color: var(--soon); color: var(--soon); }
+.hint { color: var(--warn-ink); background: var(--warn-bg); border-radius: 8px; padding: 2px 10px; font-size: .82rem; }
+
 .btn {
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit;
-  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: .9rem;
 }
 .btn:hover { border-color: var(--accent); }
-button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.status { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; margin-left: auto; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 3px 14px; border-radius: 999px; cursor: pointer; font-size: .88rem; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
-.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--r); padding: 10px 14px; font-size: .9rem; }
-.notice a { color: inherit; }
-.error { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--r); padding: 10px 14px; }
-
-.section-label { margin: 0; font-size: .78rem; letter-spacing: .12em; color: var(--muted); font-weight: 500; }
-
-/* 每一班車 */
-.list { display: grid; gap: 10px; }
-.bus {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 6px 14px; align-items: start;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px;
-}
-.plate {
-  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 1.25rem;
-  min-width: 3.6rem; text-align: center; border-radius: 6px; padding: 4px 8px; line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-}
-.body { min-width: 0; display: grid; gap: 6px; }
-.where { font-size: 1rem; }
-.where strong { font-weight: 700; }
-.where .away { color: var(--muted); white-space: nowrap; }
-.meta { color: var(--muted); font-size: .84rem; display: flex; flex-wrap: wrap; gap: 2px 12px; }
-.chip { display: inline-block; font-size: .75rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--muted); }
-.led {
-  background: var(--led-bg); color: var(--led); font-family: var(--font-led); border-radius: 6px;
-  padding: 6px 10px; text-align: right; min-width: 5.6rem; font-variant-numeric: tabular-nums;
-}
-.led .big { font-size: 1.9rem; line-height: 1; }
-.led .unit { font-size: .9rem; margin-left: 2px; }
-.led .at { display: block; font-size: .8rem; opacity: .8; margin-top: 4px; }
-.led.soon { color: var(--led-soon); }
-.led.word .big { font-size: 1.15rem; line-height: 1.6; }
-.led.dim { color: var(--muted); }
-
-/* 站點軌道：最右邊是你上車的站 */
-.track { display: flex; align-items: center; gap: 0; margin-top: 2px; overflow: hidden; }
-.track .seg-line { flex: 1 1 0; height: 2px; background: var(--line); min-width: 8px; }
-.track .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); flex: none; }
-.track .dot.me { width: 13px; height: 13px; border-color: var(--accent); background: var(--accent); }
-.track .busmark { flex: none; font-size: .72rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 0 5px; line-height: 1.5; }
-.track .more { flex: none; font-size: .72rem; color: var(--muted); padding-right: 4px; }
-
-.idle { display: grid; gap: 6px; }
-.idle-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.idle-row:last-child { border-bottom: 0; }
-.idle-row .plate { font-size: .95rem; min-width: 3rem; padding: 1px 6px; }
-.idle-row .txt { color: var(--muted); font-size: .9rem; min-width: 0; }
-
-.alarmbar, .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: .9rem; color: var(--muted); }
 .switch {
-  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-weight: 500;
-  padding: 5px 14px 5px 10px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); padding: 5px 14px 5px 8px; border-radius: 999px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
 }
-.switch .knob { width: 30px; height: 18px; border-radius: 999px; background: var(--line); position: relative; flex: none; }
-.switch .knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+.switch .knob { width: 32px; height: 19px; border-radius: 999px; background: var(--line); position: relative; flex: none; }
+.switch .knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--surface); transition: left .15s; }
 .switch[aria-checked="true"] { color: var(--ink); border-color: var(--accent); }
 .switch[aria-checked="true"] .knob { background: var(--accent); }
-.switch[aria-checked="true"] .knob::after { left: 14px; }
-.filterbar select, .filterbar input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
-.filterbar .tf-fields { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.filterbar .btn { padding: 3px 12px; font-size: .85rem; }
+.switch[aria-checked="true"] .knob::after { left: 15px; }
+
+/* 狀態列 */
+.statusbar { display: flex; align-items: center; gap: 8px; }
+.status { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; flex: 1 1 auto; min-width: 0; }
+.icon-btn {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+  padding: 6px 12px; cursor: pointer; font-size: .85rem; white-space: nowrap;
+}
+.icon-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn.big-open { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+.notice, .error { background: var(--warn-bg); color: var(--warn-ink); border-radius: 14px; padding: 10px 14px; font-size: .9rem; }
 .filter-note { margin: 0; color: var(--muted); font-size: .85rem; }
+.section-label { margin: 0; font-family: var(--font-hand); font-size: 1.05rem; font-weight: 700; color: var(--ink); }
+
+/* ---- 每一班車：車票 ---- */
+.list { display: grid; gap: 12px; }
+.bus {
+  position: relative; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 14px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; box-shadow: var(--shadow);
+}
+/* 票根的半圓缺口 */
+.bus::before, .bus::after {
+  content: ''; position: absolute; right: calc(6.4rem + 8px); width: 14px; height: 14px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line);
+}
+.bus::before { top: -8px; clip-path: inset(50% 0 0 0); }
+.bus::after { bottom: -8px; clip-path: inset(0 0 50% 0); }
+.plate {
+  background: var(--stamp); color: var(--stamp-ink); font-family: var(--font-num); font-weight: 600; font-size: 1.2rem;
+  min-width: 3.4rem; text-align: center; border-radius: 12px; padding: 4px 8px; line-height: 1.3; font-variant-numeric: tabular-nums;
+}
+.body { min-width: 0; display: grid; gap: 4px; }
+.where { font-size: .98rem; }
+.where strong { font-weight: 700; }
+.where .away { color: var(--muted); }
+.meta { color: var(--muted); font-size: .82rem; display: flex; flex-wrap: wrap; gap: 0 12px; }
+.chip { display: inline-block; font-size: .74rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--muted); background: var(--surface-2); }
 .chip.last { border-color: var(--accent); color: var(--accent); font-weight: 700; }
-.alarmbar input { width: 3.4em; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; text-align: center; }
-.alarmbar .btn { padding: 3px 12px; font-size: .85rem; }
-.alarmbar .hint { color: var(--warn-ink); background: var(--warn-bg); border-radius: 6px; padding: 1px 8px; font-size: .82rem; }
+.led {
+  text-align: right; min-width: 6.4rem; padding-left: 14px; border-left: 1.5px dashed var(--line); align-self: stretch;
+  display: grid; align-content: center; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.led .big { font-family: var(--font-num); font-size: 2.2rem; font-weight: 600; line-height: 1; }
+.led .unit { font-family: var(--font-hand); font-size: .95rem; margin-left: 2px; }
+.led .at { display: block; font-size: .78rem; color: var(--muted); margin-top: 4px; }
+.led.soon { color: var(--soon); }
+.led.word .big { font-family: var(--font-hand); font-size: 1.3rem; line-height: 1.4; }
+.led.dim { color: var(--muted); }
+
+/* 第一班：大一點 */
+.bus.hero { padding: 18px 18px; border-color: var(--accent); }
+.bus.hero .plate { font-size: 1.45rem; }
+.bus.hero .led .big { font-size: 3rem; }
+.bus.hero::before, .bus.hero::after { border-color: var(--accent); }
+.bus.hero .hero-tag { position: absolute; top: -11px; left: 16px; background: var(--accent); color: var(--accent-ink); font-size: .74rem; border-radius: 999px; padding: 1px 10px; font-family: var(--font-hand); letter-spacing: .1em; }
+
+/* 站點軌道：最右邊是你上車的站 */
+.track { display: flex; align-items: center; margin-top: 2px; overflow: hidden; }
+.track .seg-line { flex: 1 1 0; height: 0; border-top: 2px dotted var(--line); min-width: 8px; }
+.track .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); flex: none; }
+.track .dot.me { width: 13px; height: 13px; border-color: var(--accent); background: var(--accent); }
+.track .busmark { flex: none; font-size: .72rem; font-weight: 700; color: var(--stamp-ink); background: var(--stamp); border-radius: 6px; padding: 0 6px; line-height: 1.6; }
+.track .more { flex: none; font-size: .72rem; color: var(--muted); padding-right: 4px; }
+
+.empty { color: var(--muted); padding: 22px 18px; text-align: center; background: var(--surface); border: 1.5px dashed var(--line); border-radius: var(--r); font-family: var(--font-hand); font-size: 1.02rem; }
+
+/* 學校發車時刻、其他路線 */
+.sched, .idle { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; box-shadow: var(--shadow); }
+.sched-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.sched-row { display: grid; grid-template-columns: auto auto 1fr auto; gap: 12px; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+.sched-row:last-child { border-bottom: 0; }
+.sched-row .plate, .idle-row .plate { font-size: .95rem; min-width: 3rem; padding: 1px 6px; border-radius: 9px; }
+.sched-row .tm { font-family: var(--font-num); font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sched-row .txt { color: var(--muted); font-size: .88rem; min-width: 0; }
+.sched-row .cd { font-variant-numeric: tabular-nums; font-size: .86rem; color: var(--muted); white-space: nowrap; }
+.sched-row.next .tm, .sched-row.next .cd { color: var(--accent); font-weight: 700; }
+.sched-row.past { opacity: .4; }
+.sched-row.nohome .plate { background: var(--line); color: var(--muted); }
+.sched .row { display: flex; }
+.idle-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+.idle-row:last-child { border-bottom: 0; }
+.idle-row .txt { color: var(--muted); font-size: .88rem; min-width: 0; }
+
+/* 鬧鈴響起 */
 .ring {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
-  background: var(--led-bg); color: var(--led-soon); border-radius: var(--r); padding: 12px 14px;
-  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  background: var(--soon); color: #fff8ef; border-radius: var(--r); padding: 12px 16px; box-shadow: 0 10px 26px -10px rgba(120,40,20,.6);
 }
-.ring .ring-text { font-family: var(--font-led); font-size: 1.3rem; line-height: 1.3; min-width: 0; }
-.ring .ring-sub { display: block; font-family: var(--font-body); font-size: .85rem; color: var(--led); }
-.ring button {
-  font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer;
-  background: var(--led-soon); color: var(--led-bg);
-}
-.sched { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
-.sched-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.sched-head .section-label { flex: 1 1 auto; }
-.sched .seg button { padding: 3px 12px; font-size: .85rem; }
-.sched-row { display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
-.sched-row:last-child { border-bottom: 0; }
-.sched-row .plate { font-size: .95rem; min-width: 3rem; padding: 1px 6px; }
-.sched-row .tm { font-family: var(--font-led); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-.sched-row .txt { color: var(--muted); font-size: .88rem; min-width: 0; }
-.sched-row .cd { font-variant-numeric: tabular-nums; font-size: .88rem; color: var(--muted); white-space: nowrap; }
-.sched-row.next .tm, .sched-row.next .cd { color: var(--accent); font-weight: 700; }
-.sched-row.past { opacity: .45; }
-.sched-row.nohome .plate { background: var(--line); color: var(--muted); }
-.sched .foot { margin: 0; }
-.big-view {
-  position: fixed; inset: 0; z-index: 20; background: var(--led-bg); color: var(--led);
-  display: grid; grid-template-rows: auto 1fr auto; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
-}
-.big-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #c9d2cd; }
-.big-top .clock { color: #c9d2cd; font-size: 1.3rem; }
-.big-close { font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; background: #2a332e; color: #fff; }
-.big-main { display: grid; place-content: center; text-align: center; gap: 10px; min-width: 0; }
-.big-route { justify-self: center; background: var(--accent); color: #fff; font-weight: 700; font-size: clamp(1.6rem, 7vw, 3rem); border-radius: 10px; padding: 2px 18px; }
-.big-min { font-family: var(--font-led); font-size: clamp(6rem, 34vw, 18rem); line-height: 1; font-variant-numeric: tabular-nums; }
-.big-min small { font-size: .3em; margin-left: .1em; }
-.big-min.soon { color: var(--led-soon); }
-.big-min.word { font-size: clamp(3.5rem, 18vw, 9rem); }
-.big-sub { color: #c9d2cd; font-size: clamp(1rem, 4vw, 1.5rem); }
-.big-next { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; color: #c9d2cd; font-size: clamp(.95rem, 3.6vw, 1.25rem); }
-.big-next b { color: var(--led); font-family: var(--font-led); font-weight: 400; }
-@media (prefers-reduced-motion: no-preference) { .big-min.soon { animation: blink 1.2s steps(2, start) infinite; } }
-.datebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: .9rem; color: var(--muted); }
-.datebar input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
-.datebar .btn { padding: 3px 12px; font-size: .85rem; }
-.daytag { border-radius: 999px; padding: 1px 10px; font-size: .82rem; border: 1px solid var(--line); background: var(--surface); }
-.daytag.hol { border-color: var(--led-soon); color: var(--led-soon); }
-.empty { color: var(--muted); padding: 18px; text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); }
+.ring .ring-text { font-family: var(--font-hand); font-size: 1.3rem; line-height: 1.35; min-width: 0; }
+.ring .ring-sub { display: block; font-family: var(--font-body); font-size: .85rem; opacity: .9; }
+.ring button { font-weight: 700; font-size: 1.02rem; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; background: #fff8ef; color: var(--soon); }
 
-details.settings { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px; }
-details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
+/* 設定 */
+details.settings { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 16px; }
+details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted); font-size: .9rem; }
 .settings .inner { display: grid; gap: 10px; padding-bottom: 14px; }
-.settings ol { margin: 0; padding-left: 1.3em; color: var(--muted); font-size: .9rem; }
+.settings ol { margin: 0; padding-left: 1.3em; color: var(--muted); font-size: .88rem; }
 .settings label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
-.settings input {
-  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%;
-}
+.settings input { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; width: 100%; }
 .settings .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .settings a { color: var(--accent); }
-.foot { color: var(--muted); font-size: .78rem; }
+.foot { color: var(--muted); font-size: .78rem; margin: 0; }
+
+/* ---- 全螢幕倒數 ---- */
+.big-view {
+  position: fixed; inset: 0; z-index: 20; background: #2a211b; color: #f6e7cf;
+  background-image: radial-gradient(rgba(246,231,207,.05) 1px, transparent 1.2px); background-size: 24px 24px;
+  display: grid; grid-template-rows: auto 1fr auto; padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+}
+.big-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #cdb99f; }
+.big-top .clock { color: #cdb99f; font-size: 1.3rem; }
+.big-close { font-weight: 700; font-size: 1.02rem; border: 1px solid #5a4636; border-radius: 999px; padding: 10px 22px; cursor: pointer; background: #3a2d24; color: #f6e7cf; }
+.big-main { display: grid; place-content: center; text-align: center; gap: 12px; min-width: 0; }
+.big-route { justify-self: center; background: #93b07f; color: #2a211b; font-family: var(--font-num); font-weight: 600; font-size: clamp(1.6rem, 7vw, 3rem); border-radius: 14px; padding: 2px 20px; }
+.big-min { font-family: var(--font-num); font-weight: 600; font-size: clamp(6rem, 34vw, 18rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.big-min small { font-family: var(--font-hand); font-size: .26em; margin-left: .12em; font-weight: 400; }
+.big-min.soon { color: #ff8a65; }
+.big-min.word { font-family: var(--font-hand); font-size: clamp(3.2rem, 16vw, 8rem); }
+.big-sub { color: #cdb99f; font-size: clamp(1rem, 4vw, 1.5rem); font-family: var(--font-hand); }
+.big-next { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; color: #cdb99f; font-size: clamp(.95rem, 3.6vw, 1.25rem); }
+.big-next b { color: #f6e7cf; font-family: var(--font-num); font-weight: 600; }
 
 @media (max-width: 520px) {
   .bus { grid-template-columns: auto 1fr; }
-  .bus .led { grid-column: 2; grid-row: 1; justify-self: end; }
-  .bus .body { grid-column: 1 / -1; }
-  .status { margin-left: 0; width: 100%; }
+  .bus .led { grid-column: 2; grid-row: 1; justify-self: end; border-left: 0; padding-left: 0; min-width: 0; }
+  .bus .body { grid-column: 1 / -1; padding-top: 8px; border-top: 1.5px dashed var(--line); }
+  .bus::before, .bus::after { display: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .led.soon .big { animation: blink 1.2s steps(2, start) infinite; }
+  .led.soon .big, .big-min.soon { animation: blink 1.2s steps(2, start) infinite; }
   @keyframes blink { 50% { opacity: .45; } }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="title-row">
-      <h1 id="title">埔坪<span class="arrow">→</span>馬偕醫學大學</h1>
-      <span class="clock" id="clock">--:--:--</span>
-    </div>
-    <div class="controls">
-      <div class="seg" role="group" aria-label="方向">
-        <button id="dirGo" type="button" aria-pressed="true">上學</button>
-        <button id="dirBack" type="button" aria-pressed="false">回家</button>
-      </div>
-      <button class="btn" id="refreshBtn" type="button">立即更新</button>
-      <button class="btn" id="bigBtn" type="button">全螢幕倒數</button>
-      <span class="status" id="status">讀取中…</span>
-    </div>
-    <div class="datebar">
-      <label for="dateSel">日期</label>
-      <input id="dateSel" type="date">
+  <header class="top">
+    <p class="brand">埔坪 ⇄ 馬偕<small>公車小站・即時到站</small></p>
+    <span class="clock" id="clock">--:--:--</span>
+  </header>
+  <h1 id="title">埔坪→馬偕醫學大學</h1>
+
+  <nav class="dir-tabs" aria-label="方向">
+    <button class="dir-tab" id="dirGo" type="button" aria-pressed="true"><span class="k">上學去</span><span class="v">埔坪 → 馬偕醫學大學</span></button>
+    <button class="dir-tab" id="dirBack" type="button" aria-pressed="false"><span class="k">回家囉</span><span class="v">馬偕醫學大學 → 埔坪</span></button>
+  </nav>
+
+  <div class="chips" role="toolbar" aria-label="快速設定">
+    <button class="chip-btn" id="chipDate" type="button" aria-expanded="false" aria-controls="pDate">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="chipDateTxt">今天</span>
+    </button>
+    <button class="chip-btn" id="chipTime" type="button" aria-expanded="false" aria-controls="pTime">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span id="chipTimeTxt">時間不限</span>
+    </button>
+    <button class="chip-btn" id="chipAlarm" type="button" aria-expanded="false" aria-controls="pAlarm">
+      <svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span id="chipAlarmTxt">鬧鈴 關</span>
+    </button>
+    <button class="chip-btn" id="onlyMmu" type="button" role="switch" aria-checked="false">
+      <svg viewBox="0 0 24 24"><path d="M3 10l9-5 9 5-9 5z"/><path d="M7 12.5V17c3 2 7 2 10 0v-4.5"/></svg>只看校內站
+    </button>
+  </div>
+
+  <section class="panel" id="pDate" hidden>
+    <h2>哪一天搭車？</h2>
+    <div class="row">
+      <input id="dateSel" type="date" aria-label="日期">
       <button class="btn" id="dateToday" type="button" hidden>回到今天</button>
       <span class="daytag" id="dayTag"></span>
     </div>
-    <div class="alarmbar">
-      <button class="switch" id="alarmToggle" type="button" role="switch" aria-checked="false"><span class="knob"></span>鬧鈴</button>
-      <label for="alarmMin">公車還剩 <input id="alarmMin" type="number" min="1" max="60" step="1" value="12"> 分鐘到站時響</label>
+    <p class="hint-text">平日／假日會依日期自動判斷，國定假日也算。選別天時只看得到時刻表，沒有即時動態。</p>
+  </section>
+
+  <section class="panel" id="pTime" hidden>
+    <h2>什麼時間的車？</h2>
+    <div class="row">
+      <label class="field">最早幾點上車<input id="tfFrom" type="time"></label>
+      <label class="field">最晚幾點要到<input id="tfTo" type="time"></label>
+    </div>
+    <div class="row">
+      <button class="btn" id="tfClear" type="button">不限時間</button>
+      <span class="hint-text" id="tfHelp">例如 8:10 要到學校，就在「最晚幾點要到」填 08:10。</span>
+    </div>
+  </section>
+
+  <section class="panel" id="pAlarm" hidden>
+    <h2>公車快到時提醒我</h2>
+    <div class="row">
+      <button class="switch" id="alarmToggle" type="button" role="switch" aria-checked="false"><span class="knob"></span>開啟鬧鈴</button>
+      <label for="alarmMin">剩 <input id="alarmMin" type="number" min="1" max="60" step="1" value="12"> 分鐘時響</label>
       <button class="btn" id="alarmTest" type="button">試聽</button>
-      <span class="hint" id="alarmHint" hidden>點一下頁面任何地方，鬧鈴才會有聲音</span>
     </div>
-    <div class="filterbar">
-      <button class="switch" id="onlyMmu" type="button" role="switch" aria-checked="false"><span class="knob"></span>只顯示馬偕醫學大學站（不含護專）</button>
-    </div>
-    <div class="filterbar">
-      <button class="switch" id="tfToggle" type="button" role="switch" aria-checked="false"><span class="knob"></span>依抵達時間篩選</button>
-      <span class="tf-fields" id="tfFields" hidden>
-        <select id="tfBasis" aria-label="用哪個時間篩選">
-          <option value="dest">我抵達目的地</option>
-          <option value="stop">公車到上車站</option>
-        </select>
-        <label for="tfFrom">從</label><input id="tfFrom" type="time">
-        <label for="tfTo">到</label><input id="tfTo" type="time">
-        <button class="btn" id="tfClear" type="button">清除時間</button>
-      </span>
-    </div>
-  </header>
+    <span class="hint" id="alarmHint" hidden>點一下頁面任何地方，鬧鈴才會有聲音</span>
+  </section>
+
+  <div class="statusbar">
+    <span class="status" id="status">讀取中…</span>
+    <button class="icon-btn" id="refreshBtn" type="button" aria-label="立即更新">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>更新
+    </button>
+    <button class="icon-btn big-open" id="bigBtn" type="button">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>大字倒數
+    </button>
+  </div>
 
   <div class="big-view" id="big" role="dialog" aria-label="全螢幕倒數" hidden>
     <div class="big-top"><span class="clock" id="bigClock">--:--:--</span><button class="big-close" id="bigClose" type="button">關閉全螢幕</button></div>
@@ -266,7 +333,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   <div class="ring" id="ring" role="alert" hidden>
     <div class="ring-text"><span id="ringText"></span><span class="ring-sub" id="ringSub"></span></div>
-    <button id="ringStop" type="button">關掉鬧鈴</button>
+    <button id="ringStop" type="button">知道了</button>
   </div>
 
   <div class="notice" id="keyNotice" hidden>
@@ -282,7 +349,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   <section class="sched" id="schedWrap" hidden>
     <div class="sched-head">
-      <p class="section-label">馬偕醫學大學 發車時刻</p>
+      <p class="section-label">學校發車時刻</p>
       <div class="seg" role="group" aria-label="平日或假日">
         <button id="dayWk" type="button" aria-pressed="true">平日</button>
         <button id="dayHol" type="button" aria-pressed="false">假日</button>
@@ -290,7 +357,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     </div>
     <div id="sched"></div>
     <div class="row"><button class="btn" id="schedAll" type="button">顯示全部班次</button></div>
-    <p class="foot">請提前 5～10 分鐘到站候車。灰色路線牌是即時資料裡沒有經過埔坪的路線。平日／假日依日期自動判斷（含國定假日），也可以手動切換。</p>
+    <p class="foot">請提前 5～10 分鐘到站候車。灰色路線章是不經過埔坪的路線。</p>
   </section>
 
   <section class="idle" id="idleWrap" hidden>
@@ -299,7 +366,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   </section>
 
   <details class="settings" id="settings">
-    <summary>設定（TDX 金鑰，已內建，不用填）</summary>
+    <summary>進階設定（TDX 金鑰已內建，不用填）</summary>
     <div class="inner">
       <ol>
         <li>到 <a href="https://tdx.transportdata.tw/" target="_blank" rel="noopener">TDX 運輸資料流通服務平臺</a> 免費註冊會員並登入。</li>
@@ -319,8 +386,8 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   </details>
 
   <p class="foot">
-    資料來源：交通部 TDX 運輸資料流通服務平臺（新北市公車）。分鐘數是公車業者提供的預估值；
-    「推估」是用前一班的速度換算的，只供參考。標「步行」的站在台2線上，離馬偕醫學大學校內站約 500 公尺。
+    資料來源：交通部 TDX（新北市公車）。分鐘數是業者預估；「推估」是用前一班的速度或時刻表換算，只供參考。
+    標「步行」的站在台2線上，離馬偕醫學大學校內站約 500 公尺。
   </p>
 </div>
 
@@ -399,9 +466,9 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   let dir = new Date().getHours() < 14 ? 'go' : 'back';
   let onlyMmu = !!ls.get('pp.onlyMmu', false);
-  // 抵達時間篩選，上學/回家各存一組
-  const TF0 = { on: false, basis: 'dest', from: '', to: '' };
-  const tf = { go: { ...TF0, ...ls.get('pp.tf.go', {}) }, back: { ...TF0, ...ls.get('pp.tf.back', {}) } };
+  // 時間篩選，上學/回家各存一組：from = 最早幾點上車，to = 最晚幾點要到
+  const TF0 = { from: '', to: '' };
+  const tf = { go: { ...TF0, ...ls.get('pp.tf2.go', {}) }, back: { ...TF0, ...ls.get('pp.tf2.back', {}) } };
   const schoolStops = () => (onlyMmu ? SCHOOL.slice(0, 1) : SCHOOL);
   let timer = null, nextAt = 0, busy = false, last = null, sched = null;
 
@@ -665,14 +732,14 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     const f = tfActive();
     const shown = f ? rows.filter((r) => inWindow(r, f, now)) : rows;
     const hiddenN = rows.length - shown.length;
-    if (f && f.basis === 'dest' && f.to && shown.length) {
+    if (f && f.to && shown.length) {
       shown.reduce((m, r) => (r.arr > m.arr ? r : m)).last = true;
     }
     checkAlarm(isToday() ? shown : []);
     bigRows = { rows: shown, at: now };
 
     $('tfNote').hidden = !(f && hiddenN && shown.length);
-    $('tfNote').textContent = f ? `已依抵達時間（${tfLabel(f)}）隱藏 ${hiddenN} 班` : '';
+    $('tfNote').textContent = f ? `只顯示「${tfLabel(f)}」的車，另有 ${hiddenN} 班不符合` : '';
 
     const list = $('list');
     const d = new Date(viewDate + 'T12:00:00');
@@ -684,10 +751,10 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
       return;
     }
     list.innerHTML = shown.length
-      ? shown.map(rowHTML).join('')
+      ? shown.map((r, i) => rowHTML(r, i === 0)).join('')
       : f && hiddenN
-        ? `<div class="empty">沒有${f.basis === 'dest' ? '能在' : '在'} ${esc(tfLabel(f))}${f.basis === 'dest' ? '抵達' + esc(trips[0].to.name) : '到站'}的車（另有 ${hiddenN} 班不在這個時間內）。</div>`
-        : '<div class="empty">現在沒有正在往這裡開的車。看看下面各路線的狀態。</div>';
+        ? `<div class="empty">沒有「${esc(tfLabel(f))}」的車（另有 ${hiddenN} 班不符合）。<br>點上面的時間標籤調整看看。</div>`
+        : '<div class="empty">現在沒有往這裡開的車，<br>看看下面各路線的狀態。</div>';
 
     $('idleWrap').hidden = !idle.length || !isToday();
     $('idle').innerHTML = idle.map(({ t, e }) => `
@@ -714,7 +781,8 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     const known = last ? new Set(buildTrips(last.routes, 'back').map((t) => t.route)) : null;
     const f = tfActive();
     let list = TIMETABLE[schedDay].map(([route, tm, to]) => ({ route, tm, to, ts: atToday(tm) }));
-    if (f && f.basis === 'stop') list = list.filter((x) => inWindow({ sec: (x.ts - now) / 1000 }, f, now));
+    // 學校到埔坪約 10 分鐘
+    if (f) list = list.filter((x) => inWindow({ sec: (x.ts - now) / 1000, arr: (x.ts - now) / 1000 + 600 }, f, now));
     const live = isToday();
     const nextIdx = live ? list.findIndex((x) => x.ts >= now - 60000) : -1;
     const start = schedAll ? 0 : Math.max(0, nextIdx < 0 ? list.length : nextIdx - 1);
@@ -731,7 +799,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
         <span class="txt">往${esc(x.to)}</span>
         <span class="cd">${cd}</span>
       </div>`;
-    }).join('') : `<div class="empty">${f && f.basis === 'stop' ? '這個時間範圍內沒有班次。' : '今天的班次都開走了。'}</div>`;
+    }).join('') : `<div class="empty">${f ? '這個時間範圍內沒有班次。' : '今天的班次都開走了，明天見。'}</div>`;
   }
   $('dayWk').onclick = () => { schedOverride = autoDay() === 'wk' ? null : 'wk'; renderSched(); };
   $('dayHol').onclick = () => { schedOverride = autoDay() === 'hol' ? null : 'hol'; renderSched(); };
@@ -747,6 +815,8 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     if (schedOverride) tag += '（手動）';
     else if (!info.known) tag += `（沒有 ${d.getFullYear()} 年國定假日資料，只看週末）`;
     $('dayTag').textContent = tag;
+    $('chipDateTxt').textContent = isToday() ? `今天・${kind}` : `${d.getMonth() + 1}/${d.getDate()}（${wk}）${kind}`;
+    $('chipDate').classList.toggle('on', !isToday());
     $('dayTag').className = 'daytag' + (schedDayNow() === 'hol' ? ' hol' : '');
     $('dateSel').value = viewDate;
     $('dateToday').hidden = isToday();
@@ -777,10 +847,10 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   function tfActive() {
     const f = tf[dir];
-    return f.on && (f.from || f.to) ? f : null;
+    return f.from || f.to ? f : null;
   }
   function tfLabel(f) {
-    return f.from && f.to ? `${f.from}～${f.to}` : f.from ? `${f.from} 以後` : `${f.to} 以前`;
+    return [f.from && `${f.from} 後上車`, f.to && `${f.to} 前到`].filter(Boolean).join('・');
   }
   // 'HH:MM' → 選定日期那個時間的毫秒數
   function atToday(hm) {
@@ -789,11 +859,11 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     return d.getTime();
   }
   function inWindow(r, f, now) {
-    const ts = now + (f.basis === 'dest' ? r.arr : r.sec) * 1000;
-    let lo = f.from ? atToday(f.from) : -Infinity;
+    const board = now + r.sec * 1000, arr = now + r.arr * 1000;
+    const lo = f.from ? atToday(f.from) : -Infinity;
     let hi = f.to ? atToday(f.to) + 59999 : Infinity;
     if (f.from && f.to && hi < lo) hi += 864e5; // 跨午夜
-    return ts >= lo && ts <= hi;
+    return board >= lo && arr <= hi;
   }
 
   function idleText(e) {
@@ -807,7 +877,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     return '目前沒有資料';
   }
 
-  function rowHTML({ t, sec, est, bus, arr, last: isLast, plan }) {
+  function rowHTML({ t, sec, est, bus, arr, last: isLast, plan }, hero) {
     const min = Math.floor(sec / 60);
     const atStop = bus && bus.left === 0;
     let led;
@@ -842,7 +912,8 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     const walkTo = WALK[t.to.name] && dir === 'go' ? `<span class="chip">步行</span> 在${esc(t.to.name)}下車，${WALK[t.to.name]}` : '';
     const side = dir === 'go' ? `在埔坪上車（往${esc(t.next)}那側）` : '';
 
-    return `<article class="bus">
+    return `<article class="bus ${hero ? 'hero' : ''}">
+      ${hero ? `<span class="hero-tag">${isToday() ? '下一班' : '第一班'}</span>` : ''}
       <div class="plate">${esc(t.route)}</div>
       <div class="body">
         ${where}
@@ -981,9 +1052,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     dir = d;
     $('dirGo').setAttribute('aria-pressed', d === 'go');
     $('dirBack').setAttribute('aria-pressed', d === 'back');
-    $('title').innerHTML = d === 'go'
-      ? '埔坪<span class="arrow">→</span>馬偕醫學大學'
-      : '馬偕醫學大學<span class="arrow">→</span>埔坪';
+    $('title').textContent = d === 'go' ? '埔坪→馬偕醫學大學' : '馬偕醫學大學→埔坪';
     paintTf();
     stopRing();
     // 已經有資料（兩個方向一起抓的）就直接重畫，不再查一次
@@ -997,9 +1066,22 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   $('dirBack').onclick = () => dir !== 'back' && setDir('back');
   $('refreshBtn').onclick = () => refresh();
 
+  // ---- 快捷標籤與面板 ----
+  const PANELS = { chipDate: 'pDate', chipTime: 'pTime', chipAlarm: 'pAlarm' };
+  for (const [chip, panel] of Object.entries(PANELS)) {
+    $(chip).onclick = () => {
+      const open = $(panel).hidden;
+      for (const [c, p] of Object.entries(PANELS)) { $(p).hidden = true; $(c).setAttribute('aria-expanded', 'false'); }
+      $(panel).hidden = !open;
+      $(chip).setAttribute('aria-expanded', String(open));
+    };
+  }
+
   // ---- 篩選 ----
   function paintFilters() {
     $('onlyMmu').setAttribute('aria-checked', onlyMmu);
+    $('onlyMmu').classList.toggle('on', onlyMmu);
+    $('onlyMmu').title = '只看停馬偕醫學大學站的車（不含台2線上的護專站）';
   }
   $('onlyMmu').onclick = () => {
     onlyMmu = !onlyMmu;
@@ -1010,26 +1092,22 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   };
   function paintTf() {
     const f = tf[dir];
-    $('tfToggle').setAttribute('aria-checked', f.on);
-    $('tfFields').hidden = !f.on;
-    $('tfBasis').value = f.basis;
     $('tfFrom').value = f.from;
     $('tfTo').value = f.to;
+    const on = !!(f.from || f.to);
+    $('chipTimeTxt').textContent = on ? tfLabel(f) : '時間不限';
+    $('chipTime').classList.toggle('on', on);
+    $('tfHelp').textContent = dir === 'go'
+      ? '例如 8:10 要到學校，就在「最晚幾點要到」填 08:10。'
+      : '例如 17:00 才下課，就在「最早幾點上車」填 17:00。';
   }
   function saveTf() {
     const f = tf[dir];
-    f.basis = $('tfBasis').value;
     f.from = $('tfFrom').value;
     f.to = $('tfTo').value;
-    ls.set('pp.tf.' + dir, f);
+    ls.set('pp.tf2.' + dir, f);
     paintTf(); render();
   }
-  $('tfToggle').onclick = () => {
-    tf[dir].on = !tf[dir].on;
-    ls.set('pp.tf.' + dir, tf[dir]);
-    paintTf(); render();
-  };
-  $('tfBasis').onchange = saveTf;
   $('tfFrom').onchange = saveTf;
   $('tfTo').onchange = saveTf;
   $('tfClear').onclick = () => { $('tfFrom').value = ''; $('tfTo').value = ''; saveTf(); };
@@ -1110,6 +1188,8 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
 
   function paintAlarm() {
     $('alarmToggle').setAttribute('aria-checked', alarm.on);
+    $('chipAlarmTxt').textContent = alarm.on ? `鬧鈴 ${alarm.min} 分` : '鬧鈴 關';
+    $('chipAlarm').classList.toggle('on', alarm.on);
     $('alarmMin').value = alarm.min;
     $('alarmHint').hidden = !(alarm.on && (!actx || actx.state !== 'running'));
   }
