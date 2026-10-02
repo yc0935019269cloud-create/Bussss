@@ -251,20 +251,21 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
 .big-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #cdb99f; }
 .big-top .clock { color: #cdb99f; font-size: 1.3rem; }
 .big-close { font-weight: 700; font-size: 1.02rem; border: 1px solid #5a4636; border-radius: 999px; padding: 10px 22px; cursor: pointer; background: #3a2d24; color: #f6e7cf; }
-.big-main { display: grid; place-content: center; text-align: center; gap: 12px; min-width: 0; }
+.big-main { display: grid; place-content: center; text-align: center; gap: 12px; min-width: 0; min-height: 0; overflow: hidden; }
+.big-view { height: 100vh; height: 100dvh; }
 .big-route { justify-self: center; background: #93b07f; color: #2a211b; font-family: var(--font-num); font-weight: 600; font-size: clamp(1.3rem, min(7vw, 8vh), 3rem); border-radius: 14px; padding: 2px 20px; }
-.big-min { font-family: var(--font-num); font-weight: 600; font-size: clamp(4.5rem, min(34vw, 46vh), 18rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.big-min { font-family: var(--font-num); font-weight: 600; font-size: clamp(4.5rem, min(34vw, 46vh), 18rem); font-size: clamp(3rem, min(34vw, 46svh), 18rem); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .big-min small { font-family: var(--font-hand); font-size: .26em; margin-left: .12em; font-weight: 400; }
 .big-min.soon { color: #ff8a65; }
 .big-min.word { font-family: var(--font-hand); font-size: clamp(2.6rem, min(16vw, 24vh), 8rem); }
 .big-sub { color: #cdb99f; font-size: clamp(.95rem, min(4vw, 5vh), 1.5rem); font-family: var(--font-hand); }
-.big-next { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; color: #cdb99f; font-size: clamp(.95rem, 3.6vw, 1.25rem); }
+.big-next { min-width: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; color: #cdb99f; font-size: clamp(.95rem, 3.6vw, 1.25rem); }
 .big-next b { color: #f6e7cf; font-family: var(--font-num); font-weight: 600; }
 
 /* 手機橫放、平板、電腦：左邊操作，右邊班次 */
 @media (orientation: landscape) and (max-height: 560px), (min-width: 980px) {
   .wrap { max-width: 1180px; grid-template-columns: minmax(250px, 330px) minmax(0, 1fr); gap: 18px; align-items: start; padding-block: 12px 40px; }
-  .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; overscroll-behavior: contain; padding: 2px; gap: 10px; scrollbar-width: none; }
+  .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; padding: 2px; gap: 10px; scrollbar-width: none; }
   .side::-webkit-scrollbar { display: none; }
   .main { gap: 12px; }
   .dir-tabs { grid-template-columns: 1fr; gap: 6px; }
@@ -283,7 +284,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   .big-view { padding: max(10px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
   .big-main { grid-template-columns: auto auto; align-items: center; column-gap: 28px; row-gap: 6px; }
   .big-route { grid-row: 1; align-self: center; }
-  .big-min { grid-row: 1; font-size: clamp(4.5rem, min(30vw, 58vh), 18rem); }
+  .big-min { grid-row: 1; font-size: clamp(4.5rem, min(30vw, 58vh), 18rem); font-size: clamp(3rem, min(30vw, 58svh), 18rem); }
   .big-min.word { font-size: clamp(2.6rem, min(14vw, 30vh), 8rem); }
   .big-sub { grid-column: 1 / -1; }
 }
@@ -1169,8 +1170,25 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   document.addEventListener('webkitfullscreenchange', onFsChange);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !$('big').hidden) keepAwake(); });
 
+  // 大字倒數自動縮放：數字太大、放不下時一路縮小到剛好
+  let fitKey = '';
+  function fitBig(force) {
+    const main = document.querySelector('.big-main'), m = $('bigMin');
+    const key = innerWidth + 'x' + innerHeight + '|' + m.className + '|' + m.textContent.length + '|' + $('bigSub').textContent.length + '|' + $('bigRoute').hidden;
+    if (!force && key === fitKey) return;
+    fitKey = key;
+    m.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(m).fontSize);
+    const fits = () => main.scrollHeight <= main.clientHeight + 1 && m.scrollWidth <= main.clientWidth + 1 && document.getElementById('big').scrollHeight <= innerHeight + 1;
+    for (let i = 0; i < 30 && !fits() && size > 36; i++) { size *= 0.92; m.style.fontSize = size + 'px'; }
+  }
+  addEventListener('resize', () => { if (!$('big').hidden) fitBig(true); });
+  addEventListener('orientationchange', () => setTimeout(() => { if (!$('big').hidden) fitBig(true); }, 250));
+  document.addEventListener('fullscreenchange', () => setTimeout(() => { if (!$('big').hidden) fitBig(true); }, 100));
+
   function paintBig() {
     if ($('big').hidden) return;
+    requestAnimationFrame(() => fitBig(false));
     const now = Date.now();
     $('bigClock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
     const left = (r) => Math.max(0, r.sec - (now - bigRows.at) / 1000);
