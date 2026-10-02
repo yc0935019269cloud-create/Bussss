@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>埔坪⇄馬偕 公車動態</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：單欄看板。每班車一列，左邊路線牌、中間位置與站點軌道、右邊站牌式 LED 分鐘數 */
+:root {
+  --bg: #eef2ef;
+  --surface: #ffffff;
+  --ink: #15201b;
+  --muted: #5b6a63;
+  --line: #d6dfd9;
+  --accent: #0b7a55;      /* 路線牌綠 */
+  --accent-ink: #ffffff;
+  --led-bg: #111613;      /* 站牌 LED 面板 */
+  --led: #ffb31a;
+  --led-soon: #ff5d4f;
+  --warn-bg: #fff4dc;
+  --warn-ink: #7a5200;
+  --font-body: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+  --font-led: "DotGothic16", ui-monospace, "Consolas", monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1210; --surface: #151c19; --ink: #e5ebe7; --muted: #93a39b; --line: #26302b;
+    --accent: #2aa874; --accent-ink: #06130d; --led-bg: #070a09; --led: #ffb31a; --led-soon: #ff6b5e;
+    --warn-bg: #2d2412; --warn-ink: #f3cf86; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1210; --surface: #151c19; --ink: #e5ebe7; --muted: #93a39b; --line: #26302b;
+  --accent: #2aa874; --accent-ink: #06130d; --led-bg: #070a09; --led: #ffb31a; --led-soon: #ff6b5e;
+  --warn-bg: #2d2412; --warn-ink: #f3cf86; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body);
+  font-size: 15px; line-height: 1.55; padding: 0 16px;
+  padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
+}
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 20px 48px; display: grid; gap: 18px; }
+
+header { display: grid; gap: 12px; }
+.title-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { margin: 0; font-size: 1.45rem; font-weight: 700; letter-spacing: .02em; text-wrap: balance; }
+h1 .arrow { color: var(--accent); padding-inline: .2em; }
+.clock { font-family: var(--font-led); font-size: 1.1rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg button {
+  border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 500;
+  padding: 6px 16px; border-radius: 999px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; margin-left: auto; }
+
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--r); padding: 10px 14px; font-size: .9rem; }
+.notice a { color: inherit; }
+.error { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--r); padding: 10px 14px; }
+
+.section-label { margin: 0; font-size: .78rem; letter-spacing: .12em; color: var(--muted); font-weight: 500; }
+
+/* 每一班車 */
+.list { display: grid; gap: 10px; }
+.bus {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 6px 14px; align-items: start;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px;
+}
+.plate {
+  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 1.25rem;
+  min-width: 3.6rem; text-align: center; border-radius: 6px; padding: 4px 8px; line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.body { min-width: 0; display: grid; gap: 6px; }
+.where { font-size: 1rem; }
+.where strong { font-weight: 700; }
+.where .away { color: var(--muted); white-space: nowrap; }
+.meta { color: var(--muted); font-size: .84rem; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.chip { display: inline-block; font-size: .75rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--muted); }
+.led {
+  background: var(--led-bg); color: var(--led); font-family: var(--font-led); border-radius: 6px;
+  padding: 6px 10px; text-align: right; min-width: 5.6rem; font-variant-numeric: tabular-nums;
+}
+.led .big { font-size: 1.9rem; line-height: 1; }
+.led .unit { font-size: .9rem; margin-left: 2px; }
+.led .at { display: block; font-size: .8rem; opacity: .8; margin-top: 4px; }
+.led.soon { color: var(--led-soon); }
+.led.word .big { font-size: 1.15rem; line-height: 1.6; }
+.led.dim { color: var(--muted); }
+
+/* 站點軌道：最右邊是你上車的站 */
+.track { display: flex; align-items: center; gap: 0; margin-top: 2px; overflow: hidden; }
+.track .seg-line { flex: 1 1 0; height: 2px; background: var(--line); min-width: 8px; }
+.track .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); flex: none; }
+.track .dot.me { width: 13px; height: 13px; border-color: var(--accent); background: var(--accent); }
+.track .busmark { flex: none; font-size: .72rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 0 5px; line-height: 1.5; }
+.track .more { flex: none; font-size: .72rem; color: var(--muted); padding-right: 4px; }
+
+.idle { display: grid; gap: 6px; }
+.idle-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.idle-row:last-child { border-bottom: 0; }
+.idle-row .plate { font-size: .95rem; min-width: 3rem; padding: 1px 6px; }
+.idle-row .txt { color: var(--muted); font-size: .9rem; min-width: 0; }
+
+.alarmbar, .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: .9rem; color: var(--muted); }
+.switch {
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-weight: 500;
+  padding: 5px 14px 5px 10px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+}
+.switch .knob { width: 30px; height: 18px; border-radius: 999px; background: var(--line); position: relative; flex: none; }
+.switch .knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+.switch[aria-checked="true"] { color: var(--ink); border-color: var(--accent); }
+.switch[aria-checked="true"] .knob { background: var(--accent); }
+.switch[aria-checked="true"] .knob::after { left: 14px; }
+.filterbar select, .filterbar input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.filterbar .tf-fields { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.filterbar .btn { padding: 3px 12px; font-size: .85rem; }
+.filter-note { margin: 0; color: var(--muted); font-size: .85rem; }
+.chip.last { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.alarmbar input { width: 3.4em; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; text-align: center; }
+.alarmbar .btn { padding: 3px 12px; font-size: .85rem; }
+.alarmbar .hint { color: var(--warn-ink); background: var(--warn-bg); border-radius: 6px; padding: 1px 8px; font-size: .82rem; }
+.ring {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+  background: var(--led-bg); color: var(--led-soon); border-radius: var(--r); padding: 12px 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}
+.ring .ring-text { font-family: var(--font-led); font-size: 1.3rem; line-height: 1.3; min-width: 0; }
+.ring .ring-sub { display: block; font-family: var(--font-body); font-size: .85rem; color: var(--led); }
+.ring button {
+  font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer;
+  background: var(--led-soon); color: var(--led-bg);
+}
+.empty { color: var(--muted); padding: 18px; text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); }
+
+details.settings { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px; }
+details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
+.settings .inner { display: grid; gap: 10px; padding-bottom: 14px; }
+.settings ol { margin: 0; padding-left: 1.3em; color: var(--muted); font-size: .9rem; }
+.settings label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.settings input {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%;
+}
+.settings .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings a { color: var(--accent); }
+.foot { color: var(--muted); font-size: .78rem; }
+
+@media (max-width: 520px) {
+  .bus { grid-template-columns: auto 1fr; }
+  .bus .led { grid-column: 2; grid-row: 1; justify-self: end; }
+  .bus .body { grid-column: 1 / -1; }
+  .status { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .led.soon .big { animation: blink 1.2s steps(2, start) infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-row">
+      <h1 id="title">埔坪<span class="arrow">→</span>馬偕醫學大學</h1>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="方向">
+        <button id="dirGo" type="button" aria-pressed="true">上學</button>
+        <button id="dirBack" type="button" aria-pressed="false">回家</button>
+      </div>
+      <button class="btn" id="refreshBtn" type="button">立即更新</button>
+      <span class="status" id="status">讀取中…</span>
+    </div>
+    <div class="alarmbar">
+      <button class="switch" id="alarmToggle" type="button" role="switch" aria-checked="false"><span class="knob"></span>鬧鈴</button>
+      <label for="alarmMin">公車還剩 <input id="alarmMin" type="number" min="1" max="60" step="1" value="12"> 分鐘到站時響</label>
+      <button class="btn" id="alarmTest" type="button">試聽</button>
+      <span class="hint" id="alarmHint" hidden>點一下頁面任何地方，鬧鈴才會有聲音</span>
+    </div>
+    <div class="filterbar">
+      <button class="switch" id="onlyMmu" type="button" role="switch" aria-checked="false"><span class="knob"></span>只顯示馬偕醫學大學站（不含護專）</button>
+    </div>
+    <div class="filterbar">
+      <button class="switch" id="tfToggle" type="button" role="switch" aria-checked="false"><span class="knob"></span>依抵達時間篩選</button>
+      <span class="tf-fields" id="tfFields" hidden>
+        <select id="tfBasis" aria-label="用哪個時間篩選">
+          <option value="dest">我抵達目的地</option>
+          <option value="stop">公車到上車站</option>
+        </select>
+        <label for="tfFrom">從</label><input id="tfFrom" type="time">
+        <label for="tfTo">到</label><input id="tfTo" type="time">
+        <button class="btn" id="tfClear" type="button">清除時間</button>
+      </span>
+    </div>
+  </header>
+
+  <div class="ring" id="ring" role="alert" hidden>
+    <div class="ring-text"><span id="ringText"></span><span class="ring-sub" id="ringSub"></span></div>
+    <button id="ringStop" type="button">關掉鬧鈴</button>
+  </div>
+
+  <div class="notice" id="keyNotice" hidden>
+    目前沒有填 TDX 金鑰，每天只能更新約 25 次，所以改成每 3 分鐘更新一次。
+    到最下面的「設定」填入免費金鑰後，就會每 30 秒自動更新。
+  </div>
+  <div class="error" id="error" hidden></div>
+
+  <p class="filter-note" id="tfNote" hidden></p>
+  <section class="list" id="list" aria-live="polite">
+    <div class="empty">正在抓公車資料…</div>
+  </section>
+
+  <section class="idle" id="idleWrap" hidden>
+    <p class="section-label">其他路線</p>
+    <div id="idle"></div>
+  </section>
+
+  <details class="settings" id="settings">
+    <summary>設定（TDX 金鑰）</summary>
+    <div class="inner">
+      <ol>
+        <li>到 <a href="https://tdx.transportdata.tw/" target="_blank" rel="noopener">TDX 運輸資料流通服務平臺</a> 免費註冊會員並登入。</li>
+        <li>在會員中心找到「API 金鑰」，複製 Client Id 和 Client Secret。</li>
+        <li>貼到下面按「儲存」。金鑰只存在這台電腦的瀏覽器裡。</li>
+      </ol>
+      <label for="cid">Client Id<input id="cid" autocomplete="off" spellcheck="false"></label>
+      <label for="csec">Client Secret<input id="csec" type="password" autocomplete="off" spellcheck="false"></label>
+      <div class="row">
+        <button class="btn" id="saveKey" type="button">儲存</button>
+        <button class="btn" id="clearKey" type="button">清除金鑰</button>
+        <button class="btn" id="reloadRoutes" type="button">重新抓路線資料</button>
+      </div>
+      <p class="foot" id="usage"></p>
+    </div>
+  </details>
+
+  <p class="foot">
+    資料來源：交通部 TDX 運輸資料流通服務平臺（新北市公車）。分鐘數是公車業者提供的預估值；
+    「推估」是用前一班的速度換算的，只供參考。標「步行」的站在台2線上，離馬偕醫學大學校內站約 500 公尺。
+  </p>
+</div>
+
+<script>
+(() => {
+  // ---- 基本設定 ----
+  const CITY = 'NewTaipei';
+  const API = 'https://tdx.transportdata.tw/api/basic/v2/Bus/';
+  const TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
+  const HOME = '埔坪';
+  // 學校端的站，依偏好排序（校內站優先）
+  const SCHOOL = ['馬偕醫學大學', '馬偕專校三芝校區', '馬偕護專三芝校區'];
+  const WALK = { '馬偕護專三芝校區': '步行約 7 分鐘到校' };
+  const REFRESH_KEY = 30, REFRESH_NOKEY = 180; // 秒
+  const STALE_GPS_MS = 6 * 60 * 1000;
+  const NOKEY_DAILY = 50;
+
+  const $ = (id) => document.getElementById(id);
+  const ls = {
+    get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+  const today = () => new Date().toLocaleDateString('sv-SE');
+  const hhmm = (d) => d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let dir = new Date().getHours() < 14 ? 'go' : 'back';
+  let onlyMmu = !!ls.get('pp.onlyMmu', false);
+  // 抵達時間篩選，上學/回家各存一組
+  const TF0 = { on: false, basis: 'dest', from: '', to: '' };
+  const tf = { go: { ...TF0, ...ls.get('pp.tf.go', {}) }, back: { ...TF0, ...ls.get('pp.tf.back', {}) } };
+  const schoolStops = () => (onlyMmu ? SCHOOL.slice(0, 1) : SCHOOL);
+  let timer = null, nextAt = 0, busy = false, last = null;
+
+  // ---- API ----
+  function cred() { return ls.get('pp.cred'); }
+
+  async function token() {
+    const c = cred();
+    if (!c) return null;
+    const t = ls.get('pp.token');
+    if (t && t.exp > Date.now() + 60000 && t.cid === c.id) return t.v;
+    const r = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: c.id, client_secret: c.secret }),
+    });
+    if (!r.ok) throw new Error('金鑰登入失敗，請到「設定」檢查 Client Id 和 Client Secret 有沒有貼對。');
+    const j = await r.json();
+    ls.set('pp.token', { v: j.access_token, exp: Date.now() + j.expires_in * 1000, cid: c.id });
+    return j.access_token;
+  }
+
+  function countUse() {
+    if (cred()) return;
+    const u = ls.get('pp.usage');
+    const n = u && u.d === today() ? u.n + 1 : 1;
+    ls.set('pp.usage', { d: today(), n });
+  }
+  function usedToday() { const u = ls.get('pp.usage'); return u && u.d === today() ? u.n : 0; }
+
+  async function api(path, retry = true) {
+    const tk = await token();
+    const headers = tk ? { authorization: 'Bearer ' + tk } : {};
+    const url = API + path + (path.includes('?') ? '&' : '?') + '$format=JSON';
+    const r = await fetch(url, { headers });
+    countUse();
+    if (r.status === 401 && tk && retry) { ls.del('pp.token'); return api(path, false); }
+    if (r.status === 429) throw new Error(tk ? '查詢太頻繁，稍等一下再按更新。' : '今天免金鑰的次數用完了（每個網路每天 50 次）。到「設定」填入免費金鑰就能繼續用。');
+    if (r.status === 401) throw new Error('TDX 需要金鑰才能查詢，請到「設定」填入 Client Id 和 Client Secret。');
+    if (!r.ok) throw new Error('TDX 回應錯誤（' + r.status + '），稍後再試。');
+    return r.json();
+  }
+  const orFilter = (field, vals) => '$filter=' + encodeURIComponent(vals.map((v) => `${field} eq '${v}'`).join(' or '));
+
+  // ---- 路線資料（經過埔坪的所有路線，一天抓一次） ----
+  async function loadRoutes(force) {
+    const c = ls.get('pp.routes.v1');
+    if (!force && c && c.d === today() && c.data.length) return c.data;
+    const raw = await api(`StopOfRoute/City/${CITY}?$filter=` + encodeURIComponent(`Stops/any(s: s/StopName/Zh_tw eq '${HOME}')`));
+    const data = raw.map((x) => ({
+      routeUID: x.RouteUID, route: x.RouteName.Zh_tw, subUID: x.SubRouteUID, sub: x.SubRouteName?.Zh_tw || x.RouteName.Zh_tw,
+      dir: x.Direction,
+      stops: x.Stops.map((s) => ({ uid: s.StopUID, name: s.StopName.Zh_tw, seq: s.StopSequence })),
+    }));
+    ls.set('pp.routes.v1', { d: today(), data });
+    return data;
+  }
+
+  // 依方向找出「從哪站上車、在哪站下車」
+  function buildTrips(routes, which) {
+    const SCH = schoolStops();
+    const groups = new Map();
+    for (const r of routes) {
+      const st = r.stops;
+      const homeIdx = st.findIndex((s) => s.name === HOME);
+      if (homeIdx < 0) continue;
+      let from, to;
+      if (which === 'go') {
+        const cands = st.map((s, i) => ({ s, i })).filter(({ s, i }) => i > homeIdx && SCH.includes(s.name));
+        if (!cands.length) continue;
+        cands.sort((a, b) => SCH.indexOf(a.s.name) - SCH.indexOf(b.s.name) || a.i - b.i);
+        from = { ...st[homeIdx], i: homeIdx }; to = { ...cands[0].s, i: cands[0].i };
+      } else {
+        const cands = st.map((s, i) => ({ s, i })).filter(({ s, i }) => i < homeIdx && SCH.includes(s.name));
+        if (!cands.length) continue;
+        cands.sort((a, b) => SCH.indexOf(a.s.name) - SCH.indexOf(b.s.name) || b.i - a.i);
+        from = { ...cands[0].s, i: cands[0].i }; to = { ...st[homeIdx], i: homeIdx };
+      }
+      const key = r.routeUID + '|' + r.dir + '|' + from.uid;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key, routeUID: r.routeUID, route: r.route, dir: r.dir, from, to,
+          next: st[from.i + 1]?.name || '', headsign: st[st.length - 1].name, stops: st, subs: {},
+        });
+      }
+      groups.get(key).subs[r.subUID] = { fromSeq: from.seq, stops: st };
+    }
+    return [...groups.values()];
+  }
+
+  // ---- 更新 ----
+  async function refresh() {
+    if (busy) return;
+    busy = true;
+    $('status').textContent = '更新中…';
+    $('error').hidden = true;
+    try {
+      const routes = await loadRoutes(false);
+      const trips = buildTrips(routes, dir);
+      if (!trips.length) throw new Error(onlyMmu
+        ? '沒有經過埔坪和馬偕醫學大學站的路線。可以關掉「只顯示馬偕醫學大學站」再看看。'
+        : '找不到經過埔坪和馬偕的路線資料，請在「設定」按「重新抓路線資料」。');
+      const stopUIDs = [...new Set(trips.flatMap((t) => [t.from.uid, t.to.uid]))];
+      const routeNames = [...new Set(trips.map((t) => t.route))];
+      const [eta, pos] = await Promise.all([
+        api(`EstimatedTimeOfArrival/City/${CITY}?` + orFilter('StopUID', stopUIDs)),
+        api(`RealTimeNearStop/City/${CITY}?` + orFilter('RouteName/Zh_tw', routeNames)),
+      ]);
+      last = { trips, eta, pos, at: Date.now() };
+      render();
+      const upd = [...eta, ...pos].map((x) => Date.parse(x.UpdateTime || x.SrcUpdateTime)).filter(Boolean);
+      $('status').dataset.base = upd.length ? '資料時間 ' + hhmm(new Date(Math.max(...upd))) : '';
+    } catch (e) {
+      $('error').textContent = e.message || String(e);
+      $('error').hidden = false;
+      if (e instanceof TypeError) $('error').textContent = '連不上 TDX，請確認網路。';
+      $('status').dataset.base = '';
+    } finally {
+      busy = false;
+      schedule();
+      updateUsage();
+    }
+  }
+
+  function render() {
+    if (!last) return;
+    const { trips, eta, pos, at } = last;
+    const now = Date.now();
+    const gone = (now - at) / 1000; // 資料抓下來後過了幾秒
+    const rows = [], idle = [];
+    for (const t of trips) {
+      const e = eta.find((x) => x.StopUID === t.from.uid && x.Direction === t.dir);
+      const de = eta.find((x) => x.StopUID === t.to.uid && x.Direction === t.dir);
+      const buses = pos
+        .filter((p) => p.RouteName?.Zh_tw === t.route && p.Direction === t.dir)
+        .filter((p) => p.DutyStatus !== 2 && (!p.GPSTime || now - Date.parse(p.GPSTime) < STALE_GPS_MS))
+        .map((p) => {
+          const sub = t.subs[p.SubRouteUID] || { fromSeq: t.from.seq, stops: t.stops };
+          return { p, sub, left: sub.fromSeq - p.StopSequence };
+        })
+        .filter((b) => b.left > 0 || (b.left === 0 && p_atStop(b.p)))
+        .sort((a, b) => a.left - b.left);
+
+      const hasEta = e && e.StopStatus === 0 && Number.isFinite(e.EstimateTime);
+      if (!buses.length && !hasEta) {
+        idle.push({ t, e });
+        continue;
+      }
+      const firstSec = hasEta ? Math.max(0, e.EstimateTime - gone) : null;
+      // 每站大約幾秒（給後面幾班推估用）
+      let perStop = 90;
+      if (firstSec != null && buses[0] && buses[0].left > 0) perStop = Math.min(150, Math.max(40, firstSec / buses[0].left));
+      if (!buses.length) rows.push({ t, sec: firstSec, est: false, bus: null, de, gone });
+      buses.forEach((b, i) => {
+        if (i === 0) rows.push({ t, sec: firstSec ?? Math.max(0, b.left * perStop - gone), est: firstSec == null, bus: b, de, gone });
+        else rows.push({ t, sec: Math.max(0, b.left * perStop - gone), est: true, bus: b, de: null, gone });
+      });
+    }
+    rows.sort((a, b) => a.sec - b.sec);
+    for (const r of rows) r.arr = arriveSec(r);
+
+    // 抵達時間篩選
+    const f = tfActive();
+    const shown = f ? rows.filter((r) => inWindow(r, f, now)) : rows;
+    const hiddenN = rows.length - shown.length;
+    if (f && f.basis === 'dest' && f.to && shown.length) {
+      shown.reduce((m, r) => (r.arr > m.arr ? r : m)).last = true;
+    }
+    checkAlarm(shown);
+
+    $('tfNote').hidden = !(f && hiddenN && shown.length);
+    $('tfNote').textContent = f ? `已依抵達時間（${tfLabel(f)}）隱藏 ${hiddenN} 班` : '';
+
+    const list = $('list');
+    list.innerHTML = shown.length
+      ? shown.map(rowHTML).join('')
+      : f && hiddenN
+        ? `<div class="empty">沒有${f.basis === 'dest' ? '能在' : '在'} ${esc(tfLabel(f))}${f.basis === 'dest' ? '抵達' + esc(trips[0].to.name) : '到站'}的車（另有 ${hiddenN} 班不在這個時間內）。</div>`
+        : '<div class="empty">現在沒有正在往這裡開的車。看看下面各路線的狀態。</div>';
+
+    $('idleWrap').hidden = !idle.length;
+    $('idle').innerHTML = idle.map(({ t, e }) => `
+      <div class="idle-row">
+        <span class="plate">${esc(t.route)}</span>
+        <span class="txt">${esc(idleText(e))} · 往${esc(t.headsign)}${t.from.name !== HOME && WALK[t.from.name] ? ' · 在' + esc(t.from.name) + '上車' : ''}</span>
+      </div>`).join('');
+  }
+
+  function p_atStop(p) { return p.A2EventType === 1; }
+
+  // 到目的地還要幾秒
+  function arriveSec({ t, sec, de, gone }) {
+    const ride = t.to.seq - t.from.seq;
+    return de && de.StopStatus === 0 && Number.isFinite(de.EstimateTime) && de.EstimateTime - gone > sec
+      ? de.EstimateTime - gone : sec + Math.max(1, ride) * 75;
+  }
+
+  function tfActive() {
+    const f = tf[dir];
+    return f.on && (f.from || f.to) ? f : null;
+  }
+  function tfLabel(f) {
+    return f.from && f.to ? `${f.from}～${f.to}` : f.from ? `${f.from} 以後` : `${f.to} 以前`;
+  }
+  // 'HH:MM' → 今天那個時間的毫秒數
+  function atToday(hm) {
+    const [h, m] = hm.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0);
+    return d.getTime();
+  }
+  function inWindow(r, f, now) {
+    const ts = now + (f.basis === 'dest' ? r.arr : r.sec) * 1000;
+    let lo = f.from ? atToday(f.from) : -Infinity;
+    let hi = f.to ? atToday(f.to) + 59999 : Infinity;
+    if (f.from && f.to && hi < lo) hi += 864e5; // 跨午夜
+    return ts >= lo && ts <= hi;
+  }
+
+  function idleText(e) {
+    if (!e) return '目前沒有資料';
+    const s = e.StopStatus;
+    const at = Number.isFinite(e.EstimateTime) ? '，預估 ' + hhmm(new Date(Date.now() + e.EstimateTime * 1000)) + ' 到' : '';
+    if (s === 1) return '尚未發車' + at;
+    if (s === 2) return '交管不停靠';
+    if (s === 3) return '末班車已過';
+    if (s === 4) return '今日未營運';
+    return '目前沒有資料';
+  }
+
+  function rowHTML({ t, sec, est, bus, arr, last: isLast }) {
+    const min = Math.floor(sec / 60);
+    const atStop = bus && bus.left === 0;
+    let led;
+    if (atStop || (!est && sec < 60)) led = `<div class="led soon word"><span class="big">進站中</span></div>`;
+    else led = `<div class="led ${!est && min <= 3 ? 'soon' : ''} ${est ? 'dim' : ''}">
+        <span class="big">${est ? '約' : ''}${min}</span><span class="unit">分</span>
+        <span class="at">${hhmm(new Date(Date.now() + sec * 1000))} 到</span></div>`;
+
+    let where;
+    if (bus) {
+      const p = bus.p;
+      const state = p.A2EventType === 1 ? '停在' : '剛離開';
+      where = atStop
+        ? `<div class="where">車子已經到 <strong>${esc(t.from.name)}</strong></div>`
+        : `<div class="where">${state} <strong>${esc(p.StopName.Zh_tw)}</strong> <span class="away">· 還有 ${bus.left} 站</span></div>`;
+    } else {
+      where = `<div class="where">即將來車 <span class="away">· 目前沒有車子位置</span></div>`;
+    }
+
+    // 到目的地時間
+    let arrive = '';
+    if (sec != null) arrive = `約 ${hhmm(new Date(Date.now() + arr * 1000))} 到${esc(t.to.name)}`;
+    const walkFrom = WALK[t.from.name] && dir === 'back' ? `<span class="chip">步行</span> 在${esc(t.from.name)}上車` : '';
+    const walkTo = WALK[t.to.name] && dir === 'go' ? `<span class="chip">步行</span> 在${esc(t.to.name)}下車，${WALK[t.to.name]}` : '';
+    const side = dir === 'go' ? `在埔坪上車（往${esc(t.next)}那側）` : '';
+
+    return `<article class="bus">
+      <div class="plate">${esc(t.route)}</div>
+      <div class="body">
+        ${where}
+        ${bus && !atStop ? trackHTML(bus) : ''}
+        <div class="meta">
+          <span>往${esc(t.headsign)}</span>
+          ${side ? `<span>${side}</span>` : ''}
+          ${walkFrom ? `<span>${walkFrom}</span>` : ''}
+          ${walkTo ? `<span>${walkTo}</span>` : ''}
+          ${arrive ? `<span>${arrive}</span>` : ''}
+          ${isLast ? '<span class="chip last">最晚這班</span>' : ''}
+          ${est ? '<span class="chip">推估</span>' : ''}
+          ${bus ? `<span>${esc(bus.p.PlateNumb)}</span>` : ''}
+        </div>
+      </div>
+      ${led}
+    </article>`;
+  }
+
+  // 公車到上車站之間的站點小軌道（最多畫 8 站）
+  function trackHTML(b) {
+    const MAX = 8;
+    const shown = Math.min(b.left, MAX);
+    let h = '<div class="track" aria-hidden="true">';
+    if (b.left > MAX) h += `<span class="more">+${b.left - MAX}</span>`;
+    h += '<span class="busmark">車</span>';
+    for (let i = shown - 1; i >= 0; i--) {
+      h += '<span class="seg-line"></span>';
+      h += `<span class="dot ${i === 0 ? 'me' : ''}"></span>`;
+    }
+    return h + '</div>';
+  }
+
+  // ---- 計時 ----
+  function interval() { return cred() ? REFRESH_KEY : REFRESH_NOKEY; }
+  function schedule() {
+    clearTimeout(timer);
+    nextAt = Date.now() + interval() * 1000;
+    timer = setTimeout(() => { if (document.visibilityState === 'visible' || alarm.on) refresh(); else nextAt = 0; }, interval() * 1000);
+  }
+  function tick() {
+    $('clock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+    const base = $('status').dataset.base || '';
+    if (busy) return;
+    if (nextAt) {
+      const s = Math.max(0, Math.round((nextAt - Date.now()) / 1000));
+      $('status').textContent = (base ? base + ' · ' : '') + s + ' 秒後更新';
+    } else {
+      $('status').textContent = base ? base + ' · 暫停中' : '暫停中';
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (!nextAt || Date.now() > nextAt)) refresh();
+  });
+
+  function updateUsage() {
+    const has = !!cred();
+    $('keyNotice').hidden = has;
+    $('usage').textContent = has
+      ? '已使用金鑰，每 30 秒自動更新。'
+      : `沒有金鑰：今天這台電腦已查詢 ${usedToday()} 次（每個網路每天上限 ${NOKEY_DAILY} 次，每次更新用 2 次）。`;
+  }
+
+  // ---- 方向切換 ----
+  function setDir(d) {
+    dir = d;
+    $('dirGo').setAttribute('aria-pressed', d === 'go');
+    $('dirBack').setAttribute('aria-pressed', d === 'back');
+    $('title').innerHTML = d === 'go'
+      ? '埔坪<span class="arrow">→</span>馬偕醫學大學'
+      : '馬偕醫學大學<span class="arrow">→</span>埔坪';
+    last = null;
+    paintTf();
+    stopRing();
+    $('list').innerHTML = '<div class="empty">正在抓公車資料…</div>';
+    $('idleWrap').hidden = true;
+    refresh();
+  }
+  $('dirGo').onclick = () => dir !== 'go' && setDir('go');
+  $('dirBack').onclick = () => dir !== 'back' && setDir('back');
+  $('refreshBtn').onclick = () => refresh();
+
+  // ---- 篩選 ----
+  function paintFilters() {
+    $('onlyMmu').setAttribute('aria-checked', onlyMmu);
+  }
+  $('onlyMmu').onclick = () => {
+    onlyMmu = !onlyMmu;
+    ls.set('pp.onlyMmu', onlyMmu);
+    paintFilters();
+    last = null;
+    $('list').innerHTML = '<div class="empty">正在抓公車資料…</div>';
+    $('idleWrap').hidden = true;
+    $('tfNote').hidden = true;
+    refresh();
+  };
+  function paintTf() {
+    const f = tf[dir];
+    $('tfToggle').setAttribute('aria-checked', f.on);
+    $('tfFields').hidden = !f.on;
+    $('tfBasis').value = f.basis;
+    $('tfFrom').value = f.from;
+    $('tfTo').value = f.to;
+  }
+  function saveTf() {
+    const f = tf[dir];
+    f.basis = $('tfBasis').value;
+    f.from = $('tfFrom').value;
+    f.to = $('tfTo').value;
+    ls.set('pp.tf.' + dir, f);
+    paintTf(); render();
+  }
+  $('tfToggle').onclick = () => {
+    tf[dir].on = !tf[dir].on;
+    ls.set('pp.tf.' + dir, tf[dir]);
+    paintTf(); render();
+  };
+  $('tfBasis').onchange = saveTf;
+  $('tfFrom').onchange = saveTf;
+  $('tfTo').onchange = saveTf;
+  $('tfClear').onclick = () => { $('tfFrom').value = ''; $('tfTo').value = ''; saveTf(); };
+  paintFilters();
+
+  // ---- 鬧鈴 ----
+  const alarm = { on: !!ls.get('pp.alarm.on', false), min: ls.get('pp.alarm.min', 12) };
+  const suppress = {};       // 已按「關掉」的路線：key → 到這個時間前不再響
+  let hits = [], ringing = false, ringSince = 0, beepTimer = null, actx = null, testing = null;
+  const baseTitle = document.title;
+  const alarmKey = (r) => r.t.route + '|' + r.t.dir;
+
+  function audio() {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+    } catch {}
+    return actx;
+  }
+  // 鬧鐘式「嗶嗶嗶嗶」
+  function beepBurst() {
+    const ctx = audio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.02;
+    for (let i = 0; i < 4; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      const t = t0 + i * 0.16;
+      o.type = 'square'; o.frequency.value = i % 2 ? 1046 : 880;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.18, t + 0.01);
+      g.gain.setValueAtTime(0.18, t + 0.1);
+      g.gain.linearRampToValueAtTime(0, t + 0.12);
+      o.connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t + 0.14);
+    }
+  }
+  function startSound() {
+    if (beepTimer) return;
+    beepBurst();
+    beepTimer = setInterval(beepBurst, 1500);
+    try { navigator.vibrate && navigator.vibrate([400, 200, 400, 200, 400]); } catch {}
+  }
+  function stopSound() { clearInterval(beepTimer); beepTimer = null; }
+
+  function checkAlarm(rows) {
+    if (!alarm.on) { stopRing(); return; }
+    const now = Date.now(), th = alarm.min * 60;
+    hits = rows.filter((r) => !r.est && r.sec != null && r.sec <= th && !(suppress[alarmKey(r)] > now));
+    if (!hits.length) { stopRing(); return; }
+    const r = hits[0];
+    const txt = r.sec < 60 ? `${r.t.route} 進站中` : `${r.t.route} 還有 ${Math.floor(r.sec / 60)} 分鐘`;
+    $('ringText').textContent = txt;
+    $('ringSub').textContent = `到${r.t.from.name}，約 ${hhmm(new Date(now + r.sec * 1000))}` + (hits.length > 1 ? `（另有 ${hits.length - 1} 班也快到）` : '');
+    $('ring').hidden = false;
+    document.title = '【' + txt + '】' + baseTitle;
+    if (!ringing) {
+      ringing = true; ringSince = now;
+      startSound();
+      try {
+        if (window.Notification && Notification.permission === 'granted')
+          new Notification('公車快到了：' + txt, { body: $('ringSub').textContent, tag: 'pp-bus', renotify: true });
+      } catch {}
+    }
+    if (now - ringSince > 3 * 60 * 1000 && !testing) stopSound(); // 響 3 分鐘沒人關就先靜音，提示條留著
+  }
+  function stopRing() {
+    ringing = false;
+    if (!testing) stopSound();
+    $('ring').hidden = true;
+    document.title = baseTitle;
+  }
+  $('ringStop').onclick = () => {
+    const now = Date.now();
+    for (const r of hits) suppress[alarmKey(r)] = now + (r.sec + 180) * 1000; // 這班過站前不再響
+    hits = [];
+    stopRing();
+  };
+
+  function paintAlarm() {
+    $('alarmToggle').setAttribute('aria-checked', alarm.on);
+    $('alarmMin').value = alarm.min;
+    $('alarmHint').hidden = !(alarm.on && (!actx || actx.state !== 'running'));
+  }
+  $('alarmToggle').onclick = () => {
+    alarm.on = !alarm.on;
+    ls.set('pp.alarm.on', alarm.on);
+    if (alarm.on) {
+      audio();
+      try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+    }
+    paintAlarm();
+    if (alarm.on) render(); else stopRing();
+  };
+  $('alarmMin').onchange = () => {
+    const v = Math.round(Number($('alarmMin').value));
+    alarm.min = Number.isFinite(v) && v > 0 ? Math.min(60, v) : 12;
+    ls.set('pp.alarm.min', alarm.min);
+    paintAlarm(); render();
+  };
+  $('alarmTest').onclick = () => {
+    if (testing) { clearTimeout(testing); testing = null; if (!ringing) stopSound(); $('alarmTest').textContent = '試聽'; return; }
+    audio(); stopSound(); startSound();
+    $('alarmTest').textContent = '停止';
+    testing = setTimeout(() => { testing = null; if (!ringing) stopSound(); $('alarmTest').textContent = '試聽'; }, 4000);
+    setTimeout(paintAlarm, 100);
+  };
+  // 瀏覽器規定：要先點過頁面才能出聲
+  document.addEventListener('pointerdown', () => { if (alarm.on) { audio(); setTimeout(paintAlarm, 100); } });
+  paintAlarm();
+
+  // ---- 設定 ----
+  const c0 = cred();
+  if (c0) { $('cid').value = c0.id; $('csec').value = c0.secret; }
+  $('saveKey').onclick = () => {
+    const id = $('cid').value.trim(), secret = $('csec').value.trim();
+    if (!id || !secret) { $('usage').textContent = '兩個欄位都要填。'; return; }
+    ls.set('pp.cred', { id, secret }); ls.del('pp.token');
+    $('usage').textContent = '已儲存，正在測試金鑰…';
+    refresh();
+  };
+  $('clearKey').onclick = () => {
+    ls.del('pp.cred'); ls.del('pp.token'); $('cid').value = ''; $('csec').value = '';
+    updateUsage(); schedule();
+  };
+  $('reloadRoutes').onclick = async () => {
+    try { await loadRoutes(true); refresh(); } catch (e) { $('error').textContent = e.message; $('error').hidden = false; }
+  };
+
+  setInterval(tick, 1000);
+  setInterval(() => { if (!busy) render(); }, 15000);
+  setDir(dir);
+})();
+</script>
+</body>
+</html>
