@@ -95,6 +95,24 @@ h1#title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: 
   font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px;
 }
 .panel input[type="number"] { width: 4.2em; text-align: center; }
+.wheel-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wheel-wrap { position: relative; width: 84px; height: 132px; flex: none; }
+.wheel-wrap::before { /* 中間選取框 */
+  content: ''; position: absolute; left: 0; right: 0; top: 44px; height: 44px; border-radius: 12px;
+  background: var(--accent-soft); border: 1.5px solid var(--accent); pointer-events: none;
+}
+.wheel {
+  position: relative; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; overscroll-behavior: contain;
+  padding-block: 44px; scrollbar-width: none; -webkit-overflow-scrolling: touch; outline-offset: 4px; border-radius: 12px;
+  -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+}
+.wheel::-webkit-scrollbar { display: none; }
+.wheel-item {
+  height: 44px; display: grid; place-items: center; scroll-snap-align: center; cursor: pointer; user-select: none;
+  font-family: var(--font-num); font-size: 1.35rem; color: var(--muted); font-variant-numeric: tabular-nums; transition: color .1s, font-size .1s;
+}
+.wheel-item.sel { color: var(--accent); font-size: 1.75rem; font-weight: 600; }
+.wheel-label { font-size: .95rem; }
 .daytag { border-radius: 999px; padding: 2px 10px; font-size: .85rem; background: var(--surface-2); border: 1px solid var(--line); }
 .daytag.hol { border-color: var(--soon); color: var(--soon); }
 .hint { color: var(--warn-ink); background: var(--warn-bg); border-radius: 8px; padding: 2px 10px; font-size: .82rem; }
@@ -307,8 +325,14 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     <h2>公車快到時提醒我</h2>
     <div class="row">
       <button class="switch" id="alarmToggle" type="button" role="switch" aria-checked="false"><span class="knob"></span>開啟鬧鈴</button>
-      <label for="alarmMin">剩 <input id="alarmMin" type="number" min="1" max="60" step="1" value="12"> 分鐘時響</label>
       <button class="btn" id="alarmTest" type="button">試聽</button>
+    </div>
+    <div class="wheel-row">
+      <span class="wheel-label">公車還剩</span>
+      <div class="wheel-wrap">
+        <div class="wheel" id="alarmWheel" tabindex="0" role="spinbutton" aria-label="剩幾分鐘時響" aria-valuemin="1" aria-valuemax="60"></div>
+      </div>
+      <span class="wheel-label">分鐘時響</span>
     </div>
     <span class="hint" id="alarmHint" hidden>點一下頁面任何地方，鬧鈴才會有聲音</span>
   </section>
@@ -1200,6 +1224,7 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
       for (const [c, p] of Object.entries(PANELS)) { $(p).hidden = true; $(c).setAttribute('aria-expanded', 'false'); }
       $(panel).hidden = !open;
       $(chip).setAttribute('aria-expanded', String(open));
+      if (open && panel === 'pAlarm') requestAnimationFrame(() => wheelTo(alarm.min, false));
     };
   }
 
@@ -1315,8 +1340,8 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
   function paintAlarm() {
     $('alarmToggle').setAttribute('aria-checked', alarm.on);
     $('chipAlarmTxt').textContent = alarm.on ? `鬧鈴 ${alarm.min} 分` : '鬧鈴 關';
+    paintWheel(alarm.min);
     $('chipAlarm').classList.toggle('on', alarm.on);
-    $('alarmMin').value = alarm.min;
     $('alarmHint').hidden = !(alarm.on && (!actx || actx.state !== 'running'));
   }
   $('alarmToggle').onclick = () => {
@@ -1329,12 +1354,44 @@ details.settings summary { cursor: pointer; padding: 10px 0; color: var(--muted)
     paintAlarm();
     if (alarm.on) render(); else stopRing();
   };
-  $('alarmMin').onchange = () => {
-    const v = Math.round(Number($('alarmMin').value));
-    alarm.min = Number.isFinite(v) && v > 0 ? Math.min(60, v) : 12;
-    ls.set('pp.alarm.min', alarm.min);
+  // ---- 滾輪選分鐘 ----
+  const WHEEL_H = 44, wheel = $('alarmWheel');
+  wheel.innerHTML = Array.from({ length: 60 }, (_, i) => `<div class="wheel-item" data-v="${i + 1}">${i + 1}</div>`).join('');
+  const clampMin = (v) => Math.min(60, Math.max(1, v));
+  function paintWheel(v) {
+    wheel.querySelectorAll('.wheel-item.sel').forEach((el) => el.classList.remove('sel'));
+    wheel.children[v - 1]?.classList.add('sel');
+    wheel.setAttribute('aria-valuenow', v);
+    wheel.setAttribute('aria-valuetext', `${v} 分鐘`);
+  }
+  function wheelTo(v, smooth) {
+    wheel.scrollTo({ top: (v - 1) * WHEEL_H, behavior: smooth ? 'smooth' : 'auto' });
+    paintWheel(v);
+  }
+  function setAlarmMin(v) {
+    if (v === alarm.min) return;
+    alarm.min = v;
+    ls.set('pp.alarm.min', v);
     paintAlarm(); render();
-  };
+  }
+  let wheelTimer = null;
+  wheel.addEventListener('scroll', () => {
+    const v = clampMin(Math.round(wheel.scrollTop / WHEEL_H) + 1);
+    paintWheel(v);
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => setAlarmMin(v), 160); // 停下來才存
+  }, { passive: true });
+  wheel.addEventListener('click', (e) => {
+    const it = e.target.closest('.wheel-item');
+    if (it) wheelTo(Number(it.dataset.v), true);
+  });
+  wheel.addEventListener('keydown', (e) => {
+    const d = { ArrowUp: -1, ArrowDown: 1, PageUp: -5, PageDown: 5 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    wheelTo(clampMin(alarm.min + d), true);
+    setAlarmMin(clampMin(alarm.min + d));
+  });
   $('alarmTest').onclick = () => {
     if (testing) { clearTimeout(testing); testing = null; if (!ringing) stopSound(); $('alarmTest').textContent = '試聽'; return; }
     audio(); stopSound(); startSound();
