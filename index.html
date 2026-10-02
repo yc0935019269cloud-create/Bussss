@@ -147,6 +147,20 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
   font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer;
   background: var(--led-soon); color: var(--led-bg);
 }
+.sched { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+.sched-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.sched-head .section-label { flex: 1 1 auto; }
+.sched .seg button { padding: 3px 12px; font-size: .85rem; }
+.sched-row { display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.sched-row:last-child { border-bottom: 0; }
+.sched-row .plate { font-size: .95rem; min-width: 3rem; padding: 1px 6px; }
+.sched-row .tm { font-family: var(--font-led); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.sched-row .txt { color: var(--muted); font-size: .88rem; min-width: 0; }
+.sched-row .cd { font-variant-numeric: tabular-nums; font-size: .88rem; color: var(--muted); white-space: nowrap; }
+.sched-row.next .tm, .sched-row.next .cd { color: var(--accent); font-weight: 700; }
+.sched-row.past { opacity: .45; }
+.sched-row.nohome .plate { background: var(--line); color: var(--muted); }
+.sched .foot { margin: 0; }
 .empty { color: var(--muted); padding: 18px; text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); }
 
 details.settings { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px; }
@@ -227,6 +241,19 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     <div class="empty">正在抓公車資料…</div>
   </section>
 
+  <section class="sched" id="schedWrap" hidden>
+    <div class="sched-head">
+      <p class="section-label">馬偕醫學大學 發車時刻</p>
+      <div class="seg" role="group" aria-label="平日或假日">
+        <button id="dayWk" type="button" aria-pressed="true">平日</button>
+        <button id="dayHol" type="button" aria-pressed="false">假日</button>
+      </div>
+    </div>
+    <div id="sched"></div>
+    <div class="row"><button class="btn" id="schedAll" type="button">顯示全部班次</button></div>
+    <p class="foot">請提前 5～10 分鐘到站候車。灰色路線牌是即時資料裡沒有經過埔坪的路線。國定假日請手動切到「假日」。</p>
+  </section>
+
   <section class="idle" id="idleWrap" hidden>
     <p class="section-label">其他路線</p>
     <div id="idle"></div>
@@ -267,6 +294,17 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   // 學校端的站，依偏好排序（校內站優先）
   const SCHOOL = ['馬偕醫學大學', '馬偕專校三芝校區', '馬偕護專三芝校區'];
   const WALK = { '馬偕護專三芝校區': '步行約 7 分鐘到校' };
+  // 馬偕醫學大學站發車時刻（學校公告）
+  const TIMETABLE = {
+    wk: [['882','6:00','紅樹林'],['876','6:30','三芝/淡水'],['882','7:00','紅樹林'],['861','7:30','淡水'],['882','8:00','紅樹林'],
+      ['882','8:30','紅樹林'],['861','9:10','淡水'],['876','10:10','三芝/淡水'],['879','11:10','紅樹林/關渡'],['876','12:20','三芝/淡水'],
+      ['861','13:10','淡水'],['879','15:30','紅樹林/關渡'],['876','15:50','三芝/淡水'],['882','16:30','紅樹林'],['861','17:00','淡水'],
+      ['882','17:45','紅樹林'],['876','17:55','三芝/淡水'],['882','19:00','紅樹林'],['882','20:00','紅樹林']],
+    hol: [['876','6:30','三芝/淡水'],['882','7:00','紅樹林'],['882','8:00','紅樹林'],['882','8:30','紅樹林'],['876','10:00','三芝/淡水'],
+      ['861','10:55','淡水'],['861','12:15','淡水'],['876','12:20','三芝/淡水'],['876','15:50','三芝/淡水'],['882','16:30','紅樹林'],
+      ['882','17:30','紅樹林'],['876','17:55','三芝/淡水'],['882','19:00','紅樹林'],['882','20:00','紅樹林']],
+  };
+  const SCHED_SHOW = 6;
   const REFRESH_KEY = 30, REFRESH_NOKEY = 180; // 秒
   const STALE_GPS_MS = 6 * 60 * 1000;
   const NOKEY_DAILY = 50;
@@ -411,7 +449,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
   }
 
   function render() {
-    if (!last) return;
+    if (!last) { renderSched(); return; }
     const { trips, eta, pos, at } = last;
     const now = Date.now();
     const gone = (now - at) / 1000; // 資料抓下來後過了幾秒
@@ -472,7 +510,41 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
         <span class="plate">${esc(t.route)}</span>
         <span class="txt">${esc(idleText(e))} · 往${esc(t.headsign)}${t.from.name !== HOME && WALK[t.from.name] ? ' · 在' + esc(t.from.name) + '上車' : ''}</span>
       </div>`).join('');
+    renderSched();
   }
+
+  // ---- 發車時刻（回家方向） ----
+  let schedDay = [0, 6].includes(new Date().getDay()) ? 'hol' : 'wk';
+  let schedAll = false;
+  function renderSched() {
+    $('schedWrap').hidden = dir !== 'back';
+    if (dir !== 'back') return;
+    $('dayWk').setAttribute('aria-pressed', schedDay === 'wk');
+    $('dayHol').setAttribute('aria-pressed', schedDay === 'hol');
+    const now = Date.now();
+    const known = last ? new Set(last.trips.map((t) => t.route)) : null;
+    const f = tfActive();
+    let list = TIMETABLE[schedDay].map(([route, tm, to]) => ({ route, tm, to, ts: atToday(tm) }));
+    if (f && f.basis === 'stop') list = list.filter((x) => inWindow({ sec: (x.ts - now) / 1000 }, f, now));
+    const nextIdx = list.findIndex((x) => x.ts >= now - 60000);
+    const start = schedAll ? 0 : Math.max(0, nextIdx < 0 ? list.length : nextIdx - 1);
+    const view = schedAll ? list : list.slice(start, start + SCHED_SHOW);
+    $('schedAll').textContent = schedAll ? '只看接下來的班次' : '顯示全部班次';
+    $('sched').innerHTML = view.length ? view.map((x) => {
+      const diff = Math.round((x.ts - now) / 60000);
+      const cls = [x.ts < now - 60000 ? 'past' : '', list.indexOf(x) === nextIdx ? 'next' : '', known && !known.has(x.route) ? 'nohome' : ''].join(' ');
+      const cd = diff < -1 ? '已發車' : diff <= 0 ? '發車中' : diff < 60 ? `還有 ${diff} 分` : `還有 ${Math.floor(diff / 60)} 小時 ${diff % 60} 分`;
+      return `<div class="sched-row ${cls}">
+        <span class="plate">${esc(x.route)}</span>
+        <span class="tm">${esc(x.tm.padStart(5, '0'))}</span>
+        <span class="txt">往${esc(x.to)}</span>
+        <span class="cd">${cd}</span>
+      </div>`;
+    }).join('') : `<div class="empty">${f && f.basis === 'stop' ? '這個時間範圍內沒有班次。' : '今天的班次都開走了。'}</div>`;
+  }
+  $('dayWk').onclick = () => { schedDay = 'wk'; renderSched(); };
+  $('dayHol').onclick = () => { schedDay = 'hol'; renderSched(); };
+  $('schedAll').onclick = () => { schedAll = !schedAll; renderSched(); };
 
   function p_atStop(p) { return p.A2EventType === 1; }
 
@@ -619,6 +691,7 @@ details.settings summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
     stopRing();
     $('list').innerHTML = '<div class="empty">正在抓公車資料…</div>';
     $('idleWrap').hidden = true;
+    renderSched();
     refresh();
   }
   $('dirGo').onclick = () => dir !== 'go' && setDir('go');
